@@ -32,6 +32,9 @@ class AgentMessage:
     energy: float
     consensus_state: float
     send_time: float
+    
+    # Phase 2C
+    auction_bid: tuple[str, float, int] | None = None
 
 
 class AgentCore:
@@ -196,12 +199,22 @@ class AgentCore:
 
     def prepare_broadcast(self, current_time: float) -> AgentMessage:
         """Create an outgoing message with current state snapshot."""
+        # Phase 2C: Attach one random known auction bid to gossip (O(1) payload size)
+        auction_bid = None
+        if self._local_map.active_auctions:
+            # Pick a random active auction to gossip
+            task_ids = list(self._local_map.active_auctions.keys())
+            task_id = self._rng.choice(task_ids)
+            best_bid, winner_id = self._local_map.active_auctions[task_id]
+            auction_bid = (task_id, best_bid, winner_id)
+
         return AgentMessage(
             sender_id=self.agent_id,
             position=self._position.copy(),
             energy=self._energy.energy,
             consensus_state=self.consensus_state,
             send_time=current_time,
+            auction_bid=auction_bid,
         )
 
     def receive_message(self, msg: AgentMessage) -> None:
@@ -229,6 +242,12 @@ class AgentCore:
                 consensus_state=msg.consensus_state,
                 timestamp=msg.send_time,
             )
+            
+            # Phase 2C: process attached auction bid if present
+            if msg.auction_bid is not None:
+                task_id, bid_val, bidder_id = msg.auction_bid
+                self._local_map.update_auction(task_id, bid_val, bidder_id)
+                
             count += 1
         return count
 
@@ -250,3 +269,50 @@ class AgentCore:
         self.consensus_state = compute_gossip_update(
             self.consensus_state, neighbor_states, epsilon
         )
+
+    # ── Auction (called by AUCTION handlers) ────────────────
+    
+    def handle_auction_start(
+        self, 
+        task_id: str, 
+        task_position: np.ndarray, 
+        task_reward: float
+    ) -> None:
+        """
+        Process a newly spawned task. Compute local bid and cache it.
+        The bid will naturally gossip out via periodic MSG_TRANSMIT.
+        """
+        if not self.is_alive:
+            return
+            
+        from src.coordination.auction import compute_bid
+        
+        bid = compute_bid(
+            agent_position=self._position,
+            agent_energy=self._energy.energy,
+            task_position=task_position,
+            task_reward=task_reward
+        )
+        
+        if bid > float('-inf'):
+            self._local_map.update_auction(task_id, bid, self.agent_id)
+
+    def handle_auction_resolve(self, task_id: str) -> bool:
+        """
+        Evaluate if this agent won the auction based on its LocalMap.
+        Returns True if won, False otherwise.
+        """
+        if not self.is_alive:
+            return False
+            
+        from src.coordination.auction import resolve_local_winner
+        
+        winner_id = resolve_local_winner(task_id, self._local_map)
+        
+        # Win evaluated safely solely from local belief buffer
+        if winner_id == self.agent_id:
+            # We won. Optional: update state (e.g. consume energy) or mark task done.
+            # In Phase 2C, returning True is sufficient to log the victory.
+            return True
+            
+        return False

@@ -9,6 +9,7 @@ snapshot at send-time — inherently stale upon receipt.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 
@@ -40,3 +41,6 @@ class Message:
     energy: float
     consensus_state: float
     send_time: float
+    
+    # Phase 2C
+    auction_bid: Optional[tuple[str, float, int]] = None  # (task_id, bid_value, bidder_id)

@@ -90,6 +90,9 @@ class Phase1Simulation:
         self.energy_profiler = EnergyProfiler()
         self.position_logger = PositionLogger()
         self.drop_tracker = DropRateTracker()
+        
+        # Phase 2C: Global metric tracker for testing
+        self.auction_results: list[tuple[str, int, float]] = [] # task_id, winner_id, time
 
         # ── Register handlers ───────────────────────────────
         self.kernel.register_handler(
@@ -109,6 +112,12 @@ class Phase1Simulation:
         )
         self.kernel.register_handler(
             EventType.CONSENSUS_UPDATE, self._handle_consensus_update
+        )
+        self.kernel.register_handler(
+            EventType.AUCTION_START, self._handle_auction_start
+        )
+        self.kernel.register_handler(
+            EventType.AUCTION_RESOLVE, self._handle_auction_resolve
         )
 
     # ── Initial event scheduling ────────────────────────────
@@ -146,6 +155,32 @@ class Phase1Simulation:
                 event_type=EventType.CONSENSUS_UPDATE,
                 agent_id=agent.agent_id,
             ))
+        # Phase 2C: Seed a batch of tasks to auction dynamically
+        # Space them out to allow O(1) gossip to converge per task
+        for task_idx in range(3):
+            task_id = f"task_{task_idx}"
+            task_pos = self.grid.random_positions(1, self._streams["task_spawner"])[0]
+            task_reward = float(self._streams["task_spawner"].uniform(50.0, 150.0))
+            
+            start_time = 0.5 + float(task_idx * 15.0)
+            
+            for agent in self.agents:
+                # Agent receives knowledge of new task
+                self.kernel.schedule_event(Event(
+                    timestamp=start_time,
+                    event_type=EventType.AUCTION_START,
+                    agent_id=agent.agent_id,
+                    payload={"task_id": task_id, "position": task_pos, "reward": task_reward}
+                ))
+                
+                # Agent resolves local winner at exactly timeout seconds later
+                self.kernel.schedule_event(Event(
+                    timestamp=start_time + self.config.auction_timeout,
+                    event_type=EventType.AUCTION_RESOLVE,
+                    agent_id=agent.agent_id,
+                    payload={"task_id": task_id}
+                ))
+
         # Metrics logging at regular intervals
         self.kernel.schedule_event(Event(
             timestamp=dt,
@@ -189,16 +224,20 @@ class Phase1Simulation:
         if not agent.is_alive:
             return
 
+        # Phase 2C: Prepare the outbound payload from the agent
+        out_msg = agent.prepare_broadcast(event.timestamp)
+
         # Gather all positions (for KD-Tree — agents don't touch this)
         all_positions = self._get_all_positions()
 
         # Communication engine handles RGG, drop, latency, scheduling
         num_delivered = self.comm_engine.process_broadcasts(
-            sender_id=event.agent_id,
-            sender_position=agent.position,
-            sender_energy=agent.energy,
-            sender_consensus=agent.consensus_state,
-            send_time=event.timestamp,
+            sender_id=out_msg.sender_id,
+            sender_position=out_msg.position,
+            sender_energy=out_msg.energy,
+            sender_consensus=out_msg.consensus_state,
+            sender_auction_bid=out_msg.auction_bid,
+            send_time=out_msg.send_time,
             all_positions=all_positions,
             alive_mask=self.alive_mask,
             kernel=self.kernel,
@@ -248,6 +287,7 @@ class Phase1Simulation:
             energy=msg.energy,
             consensus_state=msg.consensus_state,
             send_time=msg.send_time,
+            auction_bid=msg.auction_bid,
         ))
         agent.process_inbox()
 
@@ -288,6 +328,34 @@ class Phase1Simulation:
             event_type=EventType.CONSENSUS_UPDATE,
             agent_id=event.agent_id,
         ))
+
+    def _handle_auction_start(self, event: Event) -> None:
+        """Process an auction start event for a single agent."""
+        agent = self.agents[event.agent_id]
+        if not agent.is_alive:
+            return
+            
+        payload = event.payload
+        agent.handle_auction_start(
+            task_id=payload["task_id"],
+            task_position=payload["position"],
+            task_reward=payload["reward"]
+        )
+        
+    def _handle_auction_resolve(self, event: Event) -> None:
+        """Process auction resolution on a single agent."""
+        agent = self.agents[event.agent_id]
+        if not agent.is_alive:
+            return
+            
+        payload = event.payload
+        won = agent.handle_auction_resolve(
+            task_id=payload["task_id"]
+        )
+        
+        # Store global results for metrics/validation
+        if won:
+            self.auction_results.append((payload["task_id"], agent.agent_id, event.timestamp))
 
     def _handle_metrics_log(self, event: Event) -> None:
         """Log metrics snapshot (centralized, read-only)."""

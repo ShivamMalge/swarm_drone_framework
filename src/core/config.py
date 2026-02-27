@@ -86,6 +86,9 @@ class SimConfig:
     consensus_epsilon: float = 0.02
     consensus_dt: float = 1.0
 
+    # Phase 2C: Auction
+    auction_timeout: float = 5.0
+
     def spawn_rng_streams(self) -> dict[str, np.random.Generator]:
         """
         Spawn independent RNG streams from a single SeedSequence.

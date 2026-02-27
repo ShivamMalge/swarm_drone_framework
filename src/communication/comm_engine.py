@@ -64,6 +64,7 @@ class CommunicationEngine:
         sender_position: np.ndarray,
         sender_energy: float,
         sender_consensus: float,
+        sender_auction_bid: tuple[str, float, int] | None,
         send_time: float,
         all_positions: np.ndarray,
         alive_mask: np.ndarray,
@@ -126,6 +127,7 @@ class CommunicationEngine:
                 energy=sender_energy,
                 consensus_state=sender_consensus,
                 send_time=send_time,
+                auction_bid=sender_auction_bid,
             )
 
             # Schedule MSG_DELIVER event through the kernel

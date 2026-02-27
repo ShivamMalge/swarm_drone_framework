@@ -26,6 +26,10 @@ class EventType(enum.IntEnum):
     AUCTION_TIMEOUT = 5
     METRICS_LOG = 6
     CONSENSUS_UPDATE = 7
+    
+    # Phase 2C
+    AUCTION_START = 8
+    AUCTION_RESOLVE = 9
 
 
 # Global auto-incrementing counter for deterministic tie-breaking.
