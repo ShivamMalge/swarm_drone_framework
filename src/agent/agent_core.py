@@ -21,6 +21,9 @@ import numpy as np
 
 from src.agent.energy_model import EnergyModel
 from src.agent.local_map import LocalMap
+from src.core.config import RegimeConfig
+from src.regime.classifier import Regime, RegimeClassifier
+from src.regime.telemetry_buffer import TelemetryBuffer, TelemetrySnapshot
 
 
 @dataclass
@@ -68,6 +71,7 @@ class AgentCore:
         v_max: float = 2.0,
         coverage_enabled: bool = False,
         comm_radius: float = 20.0,
+        regime_config: RegimeConfig | None = None,
     ) -> None:
         self.agent_id = agent_id
         self._position: np.ndarray = position.copy()
@@ -84,6 +88,12 @@ class AgentCore:
 
         # Phase 2B: Consensus State
         self.consensus_state: float = float(agent_id)
+
+        # Phase 2D: Passive Regime Detection
+        reg_cfg = regime_config if regime_config is not None else RegimeConfig()
+        self.telemetry_buffer = TelemetryBuffer(window_size=reg_cfg.window_size)
+        self.regime_classifier = RegimeClassifier(config=reg_cfg)
+        self.current_regime = Regime.STABLE
 
     # ── Position ────────────────────────────────────────────
 
@@ -316,3 +326,42 @@ class AgentCore:
             return True
             
         return False
+
+    # ── Regime Detection (called by REGIME_UPDATE handler) ──
+    
+    def handle_regime_update(self, current_time: float) -> None:
+        """
+        Passive evaluation layer. Computes purely local fog-of-war proxy metrics,
+        stores them in a sliding window, and heuristically maps to a Regime enum.
+        Does NOT alter kinematics, consensus, or auction behaviors.
+        """
+        if not self.is_alive:
+            return
+
+        from src.regime.local_proxies import (
+            compute_information_staleness,
+            compute_local_consensus_variance,
+            compute_neighbor_density,
+        )
+
+        # 1. Compute instantaneous fog-of-war metrics bounds
+        density = compute_neighbor_density(self._local_map)
+        staleness = compute_information_staleness(self._local_map, current_time)
+        variance = compute_local_consensus_variance(self)
+        
+        # 2. Package into a snapshot
+        snapshot = TelemetrySnapshot(
+            time=current_time,
+            neighbor_count=density,
+            mean_neighbor_age=staleness,
+            local_consensus_variance=variance,
+            local_energy=self._energy.energy
+        )
+        
+        # 3. Slide window
+        self.telemetry_buffer.append(snapshot)
+        
+        # 4. If buffer has stabilized, classify the behavioral regime
+        if self.telemetry_buffer.is_ready():
+            smoothed_metrics = self.telemetry_buffer.get_smoothed_metrics()
+            self.current_regime = self.regime_classifier.classify(smoothed_metrics)

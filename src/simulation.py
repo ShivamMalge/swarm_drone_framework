@@ -67,6 +67,7 @@ class Phase1Simulation:
                 v_max=config.v_max,
                 coverage_enabled=config.coverage_enabled,
                 comm_radius=config.comm_radius,
+                regime_config=config.regime,
             )
             self.agents.append(agent)
 
@@ -119,6 +120,9 @@ class Phase1Simulation:
         self.kernel.register_handler(
             EventType.AUCTION_RESOLVE, self._handle_auction_resolve
         )
+        self.kernel.register_handler(
+            EventType.REGIME_UPDATE, self._handle_regime_update
+        )
 
     # ── Initial event scheduling ────────────────────────────
 
@@ -153,6 +157,16 @@ class Phase1Simulation:
             self.kernel.schedule_event(Event(
                 timestamp=consensus_start_time,
                 event_type=EventType.CONSENSUS_UPDATE,
+                agent_id=agent.agent_id,
+            ))
+            
+            # Phase 2D: Staggered initial regime events
+            regime_delta = self.config.regime.classification_interval / float(self.config.num_agents)
+            regime_start_time = dt + (agent.agent_id * regime_delta)
+            
+            self.kernel.schedule_event(Event(
+                timestamp=regime_start_time,
+                event_type=EventType.REGIME_UPDATE,
                 agent_id=agent.agent_id,
             ))
         # Phase 2C: Seed a batch of tasks to auction dynamically
@@ -357,6 +371,25 @@ class Phase1Simulation:
         if won:
             self.auction_results.append((payload["task_id"], agent.agent_id, event.timestamp))
 
+    def _handle_regime_update(self, event: Event) -> None:
+        """Process a passive regime local evaluation."""
+        agent = self.agents[event.agent_id]
+        if not agent.is_alive:
+            return
+
+        agent.handle_regime_update(event.timestamp)
+
+        if not agent.is_alive:
+            self.alive_mask[event.agent_id] = False
+            return
+
+        # Schedule the next regime update
+        self.kernel.schedule_event(Event(
+            timestamp=event.timestamp + self.config.regime.classification_interval,
+            event_type=EventType.REGIME_UPDATE,
+            agent_id=event.agent_id,
+        ))
+
     def _handle_metrics_log(self, event: Event) -> None:
         """Log metrics snapshot (centralized, read-only)."""
         t = event.timestamp
@@ -400,4 +433,12 @@ class Phase1Simulation:
             "comm_delivered": self.comm_engine.total_delivered,
             "drop_rate": self.drop_tracker.drop_rate,
             "simulation_time": self.kernel.now,
+            "regimes_distribution": self._get_regime_distribution(),
         }
+
+    def _get_regime_distribution(self) -> dict[str, int]:
+        dist = {}
+        for agent in self.agents:
+            if agent.is_alive:
+                dist[agent.current_regime.name] = dist.get(agent.current_regime.name, 0) + 1
+        return dist

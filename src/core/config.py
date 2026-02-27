@@ -13,9 +13,20 @@ guarantees full deterministic replay across runs.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
+
+
+@dataclass(frozen=True)
+class RegimeConfig:
+    """Tunable thresholds for regime detection (Passive Detection Layer)."""
+    window_size: int = 10
+    classification_interval: float = 5.0
+    neighbor_low: int = 5
+    variance_high: float = 1.5
+    energy_slope_critical: float = -0.8
+    staleness_high: float = 3.0
 
 
 @dataclass(frozen=True)
@@ -88,6 +99,9 @@ class SimConfig:
 
     # Phase 2C: Auction
     auction_timeout: float = 5.0
+
+    # Phase 2D: Regime Detection
+    regime: RegimeConfig = field(default_factory=RegimeConfig)
 
     def spawn_rng_streams(self) -> dict[str, np.random.Generator]:
         """
