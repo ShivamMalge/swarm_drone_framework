@@ -5,7 +5,7 @@ simulation:
   num_agents: 100
   grid_width: 200.0
   grid_height: 200.0
-  comm_radius: 25.0       # moderate — avoids fully connected graph
+  comm_radius: 70.0       # Recalibrated logic: ~29 neighbors, 100% connected
   max_time: 100.0
   dt: 1.0
   seed: 42

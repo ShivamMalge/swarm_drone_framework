@@ -65,6 +65,8 @@ class Phase1Simulation:
                 energy_model=EnergyModel(config.energy_initial),
                 rng=self._streams[f"agent_{i}"],
                 v_max=config.v_max,
+                coverage_enabled=config.coverage_enabled,
+                comm_radius=config.comm_radius,
             )
             self.agents.append(agent)
 

@@ -49,6 +49,10 @@ class AgentCore:
         Per-agent independent RNG stream (injected, not global).
     v_max : float
         Maximum velocity magnitude.
+    coverage_enabled : bool
+        Whether to use distributed Voronoi coverage control.
+    comm_radius : float
+        Agent's communication radius, bounding its local Voronoi cell.
     """
 
     def __init__(
@@ -58,6 +62,8 @@ class AgentCore:
         energy_model: EnergyModel,
         rng: np.random.Generator,
         v_max: float = 2.0,
+        coverage_enabled: bool = False,
+        comm_radius: float = 20.0,
     ) -> None:
         self.agent_id = agent_id
         self._position: np.ndarray = position.copy()
@@ -65,6 +71,8 @@ class AgentCore:
         self._rng = rng
         self._local_map = LocalMap()
         self._v_max = v_max
+        self._coverage_enabled = coverage_enabled
+        self._comm_radius = comm_radius
 
         # Communication queues (processed only via events)
         self._inbox: deque[AgentMessage] = deque()
@@ -99,16 +107,38 @@ class AgentCore:
         Compute desired velocity from local state.
 
         Phase 1: random walk bounded by v_max.
-        Phase 2+: Voronoi centroid seeking via coordination layer.
+        Phase 2: Voronoi centroid seeking via distributed Lloyd logic.
         """
         if not self.is_alive:
             return np.zeros(2)
-        # Simple random walk placeholder (deterministic backbone)
-        direction = self._rng.standard_normal(2)
-        norm = np.linalg.norm(direction)
-        if norm > 0:
-            direction = direction / norm
-        return direction * self._v_max * 0.5
+
+        if self._coverage_enabled:
+            from src.coordination.voronoi_coverage import compute_local_centroid
+            
+            neighbors = self._local_map.get_all_neighbors()
+            neighbor_positions = [info.position for info in neighbors]
+            
+            # Compute centroid based ONLY on own position + stale neighbor beliefs
+            centroid = compute_local_centroid(
+                self._position, neighbor_positions, self._comm_radius
+            )
+            
+            # Proportional feedback law: v_i = k * (c_i - x_i)
+            k_gain = 0.5
+            velocity = k_gain * (centroid - self._position)
+            
+            # Bound velocity safely
+            speed = float(np.linalg.norm(velocity))
+            if speed > self._v_max:
+                velocity = (velocity / speed) * self._v_max
+            return velocity
+        else:
+            # Simple random walk placeholder (deterministic backbone)
+            direction = self._rng.standard_normal(2)
+            norm = np.linalg.norm(direction)
+            if norm > 0:
+                direction = direction / norm
+            return direction * self._v_max * 0.5
 
     def apply_movement(
         self,

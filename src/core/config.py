@@ -78,6 +78,9 @@ class SimConfig:
     r_collision: float = 0.5
     max_time: float = 200.0
     seed: int = 42
+    
+    # Phase 2: Coverage Control
+    coverage_enabled: bool = False
 
     def spawn_rng_streams(self) -> dict[str, np.random.Generator]:
         """
