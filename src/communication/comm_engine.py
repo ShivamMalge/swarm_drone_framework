@@ -63,6 +63,7 @@ class CommunicationEngine:
         sender_id: int,
         sender_position: np.ndarray,
         sender_energy: float,
+        sender_consensus: float,
         send_time: float,
         all_positions: np.ndarray,
         alive_mask: np.ndarray,
@@ -79,6 +80,8 @@ class CommunicationEngine:
             Sender's current position.
         sender_energy : float
             Sender's current energy.
+        sender_consensus : float
+            Sender's current consensus state.
         send_time : float
             Current simulation time.
         all_positions : np.ndarray
@@ -121,6 +124,7 @@ class CommunicationEngine:
                 receiver_id=nbr_id,
                 position=sender_position.copy(),
                 energy=sender_energy,
+                consensus_state=sender_consensus,
                 send_time=send_time,
             )
 

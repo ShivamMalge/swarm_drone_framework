@@ -30,6 +30,7 @@ class AgentMessage:
     sender_id: int
     position: np.ndarray
     energy: float
+    consensus_state: float
     send_time: float
 
 
@@ -77,6 +78,9 @@ class AgentCore:
         # Communication queues (processed only via events)
         self._inbox: deque[AgentMessage] = deque()
         self._outbox: deque[AgentMessage] = deque()
+
+        # Phase 2B: Consensus State
+        self.consensus_state: float = float(agent_id)
 
     # ── Position ────────────────────────────────────────────
 
@@ -196,6 +200,7 @@ class AgentCore:
             sender_id=self.agent_id,
             position=self._position.copy(),
             energy=self._energy.energy,
+            consensus_state=self.consensus_state,
             send_time=current_time,
         )
 
@@ -221,7 +226,27 @@ class AgentCore:
                 agent_id=msg.sender_id,
                 position=msg.position,
                 energy=msg.energy,
+                consensus_state=msg.consensus_state,
                 timestamp=msg.send_time,
             )
             count += 1
         return count
+
+    # ── Consensus (called by CONSENSUS_UPDATE handler) ──────
+
+    def handle_consensus_update(self, epsilon: float) -> None:
+        """
+        Execute one iteration of the discrete-time distributed gossip protocol.
+        """
+        if not self.is_alive:
+            return
+
+        from src.coordination.gossip_consensus import compute_gossip_update
+        
+        # Fog-of-war constraint: We only use the local, delayed map beliefs.
+        neighbors = self._local_map.get_all_neighbors()
+        neighbor_states = [nb.consensus_state for nb in neighbors]
+        
+        self.consensus_state = compute_gossip_update(
+            self.consensus_state, neighbor_states, epsilon
+        )

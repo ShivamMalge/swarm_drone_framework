@@ -19,6 +19,7 @@ class NeighborBelief:
     agent_id: int
     position: np.ndarray
     energy: float
+    consensus_state: float
     timestamp: float  # time at which the neighbor sent the data
 
 
@@ -38,6 +39,7 @@ class LocalMap:
         agent_id: int,
         position: np.ndarray,
         energy: float,
+        consensus_state: float,
         timestamp: float,
     ) -> None:
         """
@@ -51,6 +53,7 @@ class LocalMap:
                 agent_id=agent_id,
                 position=position.copy(),
                 energy=energy,
+                consensus_state=consensus_state,
                 timestamp=timestamp,
             )
 

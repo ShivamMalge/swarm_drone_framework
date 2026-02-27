@@ -107,6 +107,9 @@ class Phase1Simulation:
         self.kernel.register_handler(
             EventType.METRICS_LOG, self._handle_metrics_log
         )
+        self.kernel.register_handler(
+            EventType.CONSENSUS_UPDATE, self._handle_consensus_update
+        )
 
     # ── Initial event scheduling ────────────────────────────
 
@@ -130,6 +133,17 @@ class Phase1Simulation:
             self.kernel.schedule_event(Event(
                 timestamp=dt,
                 event_type=EventType.ENERGY_UPDATE,
+                agent_id=agent.agent_id,
+            ))
+            
+            # Phase 2B: Staggered initial consensus events
+            # small_delta << dt to break artificial synchrony but maintain determinism
+            small_delta = self.config.consensus_dt / 1000.0
+            consensus_start_time = dt + (agent.agent_id * small_delta)
+            
+            self.kernel.schedule_event(Event(
+                timestamp=consensus_start_time,
+                event_type=EventType.CONSENSUS_UPDATE,
                 agent_id=agent.agent_id,
             ))
         # Metrics logging at regular intervals
@@ -183,6 +197,7 @@ class Phase1Simulation:
             sender_id=event.agent_id,
             sender_position=agent.position,
             sender_energy=agent.energy,
+            sender_consensus=agent.consensus_state,
             send_time=event.timestamp,
             all_positions=all_positions,
             alive_mask=self.alive_mask,
@@ -231,6 +246,7 @@ class Phase1Simulation:
             sender_id=msg.sender_id,
             position=msg.position,
             energy=msg.energy,
+            consensus_state=msg.consensus_state,
             send_time=msg.send_time,
         ))
         agent.process_inbox()
@@ -251,6 +267,25 @@ class Phase1Simulation:
         self.kernel.schedule_event(Event(
             timestamp=event.timestamp + self.config.dt,
             event_type=EventType.ENERGY_UPDATE,
+            agent_id=event.agent_id,
+        ))
+
+    def _handle_consensus_update(self, event: Event) -> None:
+        """Process an asynchronous gossip consensus update for one agent."""
+        agent = self.agents[event.agent_id]
+        if not agent.is_alive:
+            return
+
+        agent.handle_consensus_update(epsilon=self.config.consensus_epsilon)
+
+        if not agent.is_alive:
+            self.alive_mask[event.agent_id] = False
+            return
+
+        # Schedule the next consensus update
+        self.kernel.schedule_event(Event(
+            timestamp=event.timestamp + self.config.consensus_dt,
+            event_type=EventType.CONSENSUS_UPDATE,
             agent_id=event.agent_id,
         ))
 

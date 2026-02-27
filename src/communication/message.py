@@ -28,6 +28,8 @@ class Message:
         Sender's position at send_time.
     energy : float
         Sender's energy at send_time.
+    consensus_state : float
+        Sender's consensus value at send_time.
     send_time : float
         Simulation time at which the sender created the message.
     """
@@ -36,4 +38,5 @@ class Message:
     receiver_id: int
     position: np.ndarray
     energy: float
+    consensus_state: float
     send_time: float

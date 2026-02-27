@@ -25,6 +25,7 @@ class EventType(enum.IntEnum):
     MSG_DELIVER = 4
     AUCTION_TIMEOUT = 5
     METRICS_LOG = 6
+    CONSENSUS_UPDATE = 7
 
 
 # Global auto-incrementing counter for deterministic tie-breaking.

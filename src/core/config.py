@@ -82,6 +82,10 @@ class SimConfig:
     # Phase 2: Coverage Control
     coverage_enabled: bool = False
 
+    # Phase 2B: Consensus
+    consensus_epsilon: float = 0.02
+    consensus_dt: float = 1.0
+
     def spawn_rng_streams(self) -> dict[str, np.random.Generator]:
         """
         Spawn independent RNG streams from a single SeedSequence.
