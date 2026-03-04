@@ -191,6 +191,25 @@ def run_experiment(config_path: str, profile: bool = False) -> dict:
                 elif i == 5:
                     print("  ...")
             print()
+            
+        if hasattr(sim, 'adaptation_log') and len(sim.adaptation_log) > 0:
+            alog = sim.adaptation_log
+            
+            c_gains = [e["coverage_gain"] for e in alog]
+            g_eps   = [e["gossip_epsilon"] for e in alog]
+            b_rates = [e["broadcast_rate"] for e in alog]
+            a_parts = [e["auction_participation"] for e in alog]
+            v_scl   = [e["velocity_scale"] for e in alog]
+            
+            print("\n  Stability Projection Summary")
+            print("  ----------------------------")
+            print(f"  coverage_gain range:      [{min(c_gains):.2f}, {max(c_gains):.2f}]")
+            print(f"  gossip_epsilon range:     [{min(g_eps):.3f}, {max(g_eps):.3f}]")
+            print(f"  broadcast_rate range:     [{min(b_rates):.2f}, {max(b_rates):.2f}]")
+            print(f"  auction_participation:    [{min(a_parts):.2f}, {max(a_parts):.2f}]")
+            print(f"  velocity_scale range:     [{min(v_scl):.2f}, {max(v_scl):.2f}]")
+            print(f"  total_projection_events:  {alog[-1]['projection_events']}")
+            print()
             print("=" * 60)
 
         # Per-agent energy snapshot (first 10 + last 10)

@@ -25,6 +25,7 @@ from src.core.config import RegimeConfig
 from src.regime.classifier import Regime, RegimeClassifier
 from src.regime.telemetry_buffer import TelemetryBuffer, TelemetrySnapshot
 from src.adaptation.hybrid_supervisor import HybridSupervisor, Strategy
+from src.adaptation.safety_projector import project_to_theta_safe
 
 
 @dataclass
@@ -100,12 +101,17 @@ class AgentCore:
         self.supervisor = HybridSupervisor()
         self.current_strategy = Strategy.NORMAL_OPERATION
         
-        # Adjustable Local Parameters
-        self._broadcast_rate_multiplier: float = 1.0
-        self._gossip_weight_multiplier: float = 1.0
-        self._auction_enabled: bool = True
-        self._coverage_active: bool = coverage_enabled
-        self._broadcast_enabled: bool = True
+        # Phase 4: Theta Safe Parameters
+        self.coverage_gain: float = 1.0
+        self.gossip_epsilon: float = 0.05
+        self.broadcast_rate: float = 1.0
+        self.auction_participation: float = 1.0
+        self.velocity_scale: float = 1.0
+        self.projection_events: int = 0
+        
+        # Stored initial states
+        self._base_epsilon = 0.05
+        self._coverage_enabled = coverage_enabled
 
     # ── Position ────────────────────────────────────────────
 
@@ -141,7 +147,7 @@ class AgentCore:
         if not self.is_alive:
             return np.zeros(2)
 
-        if self._coverage_active:
+        if self.coverage_gain > 0.05:
             from src.coordination.voronoi_coverage import compute_local_centroid
             
             neighbors = self._local_map.get_all_neighbors()
@@ -153,13 +159,14 @@ class AgentCore:
             )
             
             # Proportional feedback law: v_i = k * (c_i - x_i)
-            k_gain = 0.5
+            k_gain = 0.5 * self.coverage_gain
             velocity = k_gain * (centroid - self._position)
             
             # Bound velocity safely
             speed = float(np.linalg.norm(velocity))
-            if speed > self._v_max:
-                velocity = (velocity / speed) * self._v_max
+            max_spd = self._v_max * self.velocity_scale
+            if speed > max_spd:
+                velocity = (velocity / speed) * max_spd
             return velocity
         else:
             # Simple random walk placeholder (deterministic backbone)
@@ -167,7 +174,7 @@ class AgentCore:
             norm = np.linalg.norm(direction)
             if norm > 0:
                 direction = direction / norm
-            return direction * self._v_max * 0.5
+            return direction * self._v_max * 0.5 * self.velocity_scale
 
     def apply_movement(
         self,
@@ -221,8 +228,13 @@ class AgentCore:
 
     def prepare_broadcast(self, current_time: float) -> AgentMessage | None:
         """Create an outgoing message with current state snapshot."""
-        if not self._broadcast_enabled:
+        if self.broadcast_rate <= 0.05:
+            # Structurally deactivated
             return None
+        elif self.broadcast_rate < 1.0:
+            # Probabilistically thin transmissions to conserve energy
+            if self._rng.random() > self.broadcast_rate:
+                return None
             
         # Phase 2C: Attach one random known auction bid to gossip (O(1) payload size)
         auction_bid = None
@@ -291,8 +303,8 @@ class AgentCore:
         neighbors = self._local_map.get_all_neighbors()
         neighbor_states = [nb.consensus_state for nb in neighbors]
         
-        # Apply local tuning
-        effective_epsilon = epsilon * self._gossip_weight_multiplier
+        # Apply local tuning (completely obscuring the global event epsilon argument)
+        effective_epsilon = self.gossip_epsilon
         
         self.consensus_state = compute_gossip_update(
             self.consensus_state, neighbor_states, effective_epsilon
@@ -310,7 +322,7 @@ class AgentCore:
         Process a newly spawned task. Compute local bid and cache it.
         The bid will naturally gossip out via periodic MSG_TRANSMIT.
         """
-        if not self.is_alive or not self._auction_enabled:
+        if not self.is_alive or self.auction_participation <= 0.05:
             return
             
         from src.coordination.auction import compute_bid
@@ -330,7 +342,7 @@ class AgentCore:
         Evaluate if this agent won the auction based on its LocalMap.
         Returns True if won, False otherwise.
         """
-        if not self.is_alive or not self._auction_enabled:
+        if not self.is_alive or self.auction_participation <= 0.05:
             return False
             
         from src.coordination.auction import resolve_local_winner
@@ -384,40 +396,27 @@ class AgentCore:
             smoothed_metrics = self.telemetry_buffer.get_smoothed_metrics()
             self.current_regime = self.regime_classifier.classify(smoothed_metrics)
             
-            # 5. Phase 3C: Pass regime to supervisor to select active strategy
+            # 5. Phase 3C/4: Pass regime to supervisor, receive proposed theta, project to safe bounds
             self.current_strategy = self.supervisor.select_strategy(self.current_regime)
-            self._apply_strategy_parameters()
+            theta_proposed = self.supervisor.propose_parameters(self.current_strategy, self._base_epsilon)
             
-    def _apply_strategy_parameters(self) -> None:
+            if not self._coverage_enabled:
+                theta_proposed["coverage_gain"] = 0.0
+                
+            self._apply_strategy_parameters(theta_proposed)
+            
+    def _apply_strategy_parameters(self, theta_proposed: dict[str, float]) -> None:
         """
-        Translates the global functional intent behind the chosen Strategy
-        into explicit concrete tuning of internal boolean and float dials.
+        Projects proposed modifications onto the Safe Manifold.
+        Records clipping events when boundary assertions are necessary.
         """
-        # Reset defaults before applying diffs
-        self._coverage_active = self._coverage_enabled
-        self._broadcast_enabled = True
-        self._auction_enabled = True
-        self._broadcast_rate_multiplier = 1.0
-        self._gossip_weight_multiplier = 1.0
+        theta_safe, clip_count = project_to_theta_safe(theta_proposed)
         
-        if self.current_strategy == Strategy.NORMAL_OPERATION:
-            pass # Use defaults
-            
-        elif self.current_strategy == Strategy.CONSENSUS_PRIORITY:
-            self._gossip_weight_multiplier = 1.5
-            self._auction_enabled = False # Suspend auction during data fault tolerance
-            
-        elif self.current_strategy == Strategy.CONNECTIVITY_RECOVERY:
-            self._coverage_active = False # Stop scattering to heal graph
-            self._gossip_weight_multiplier = 2.0
-            self._auction_enabled = False
-            
-        elif self.current_strategy == Strategy.ENERGY_CONSERVATION:
-            self._broadcast_rate_multiplier = 0.5
-            self._auction_enabled = False
-            self._coverage_active = False # Conserve kinematic movement energy
-            
-        elif self.current_strategy == Strategy.LATENCY_STABILIZATION:
-            self._broadcast_rate_multiplier = 0.5 # Slow emissions to de-saturate heavily delayed airwaves
-            self._gossip_weight_multiplier = 0.5  # Modulate epsilon down during massive delay to preserve spectral bounds
+        self.coverage_gain = theta_safe.get("coverage_gain", self.coverage_gain)
+        self.gossip_epsilon = theta_safe.get("gossip_epsilon", self.gossip_epsilon)
+        self.broadcast_rate = theta_safe.get("broadcast_rate", self.broadcast_rate)
+        self.auction_participation = theta_safe.get("auction_participation", self.auction_participation)
+        self.velocity_scale = theta_safe.get("velocity_scale", self.velocity_scale)
+        
+        self.projection_events += clip_count
 

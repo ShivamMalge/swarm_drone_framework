@@ -95,9 +95,10 @@ class Phase1Simulation:
         # Phase 2C: Global metric tracker for testing
         self.auction_results: list[tuple[str, int, float]] = [] # task_id, winner_id, time
 
-        # Phase 3D: Global Connectivity Telemetry log
-        # stores time-series dictionary metrics
+        # Phase 3D/4: Global metric logs
         self.connectivity_log: list[dict] = []
+        self.adaptation_log: list[dict] = []
+        
 
         # ── Register handlers ───────────────────────────────
         self.kernel.register_handler(
@@ -244,6 +245,15 @@ class Phase1Simulation:
 
         # Phase 2C: Prepare the outbound payload from the agent
         out_msg = agent.prepare_broadcast(event.timestamp)
+        
+        if out_msg is None:
+            # Agent intentionally silenced broadcast per local parameters
+            self.kernel.schedule_event(Event(
+                timestamp=event.timestamp + self.config.dt,
+                event_type=EventType.MSG_TRANSMIT,
+                agent_id=event.agent_id,
+            ))
+            return
 
         # Gather all positions (for KD-Tree — agents don't touch this)
         all_positions = self._get_all_positions()
@@ -417,6 +427,19 @@ class Phase1Simulation:
             "connectivity_ratio": metrics["connectivity_ratio"],
             "spectral_gap": metrics["spectral_gap"]
         })
+
+        # Phase 4: System-wide adaptation metrics compilation
+        alive_agents = [a for a in self.agents if a.is_alive]
+        if alive_agents:
+            self.adaptation_log.append({
+                "time": t,
+                "coverage_gain": sum(a.coverage_gain for a in alive_agents) / len(alive_agents),
+                "gossip_epsilon": sum(a.gossip_epsilon for a in alive_agents) / len(alive_agents),
+                "broadcast_rate": sum(a.broadcast_rate for a in alive_agents) / len(alive_agents),
+                "auction_participation": sum(a.auction_participation for a in alive_agents) / len(alive_agents),
+                "velocity_scale": sum(a.velocity_scale for a in alive_agents) / len(alive_agents),
+                "projection_events": sum(a.projection_events for a in self.agents)
+            })
 
         # Schedule next metrics log
         next_t = t + self.config.dt * 5  # Log every 5 dt intervals
