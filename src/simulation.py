@@ -95,6 +95,10 @@ class Phase1Simulation:
         # Phase 2C: Global metric tracker for testing
         self.auction_results: list[tuple[str, int, float]] = [] # task_id, winner_id, time
 
+        # Phase 3D: Global Connectivity Telemetry log
+        # stores: list of (timestamp, largest_component_size, component_count, connectivity_ratio)
+        self.connectivity_log: list[tuple[float, int, int, float]] = []
+
         # ── Register handlers ───────────────────────────────
         self.kernel.register_handler(
             EventType.KINEMATIC_UPDATE, self._handle_kinematic_update
@@ -396,6 +400,16 @@ class Phase1Simulation:
         for agent in self.agents:
             self.energy_profiler.record(t, agent.agent_id, agent.energy)
             self.position_logger.record(t, agent.agent_id, agent.position)
+
+        # Phase 3D: Global connectivity metrics compilation
+        # Fully centralized analytical operation; agents are blind to this.
+        from src.metrics.connectivity_metrics import compute_largest_connected_component
+        
+        all_pos = self._get_all_positions()
+        lcc_size, comp_count, conn_ratio = compute_largest_connected_component(
+            all_pos, self.config.comm_radius
+        )
+        self.connectivity_log.append((t, lcc_size, comp_count, conn_ratio))
 
         # Schedule next metrics log
         next_t = t + self.config.dt * 5  # Log every 5 dt intervals
