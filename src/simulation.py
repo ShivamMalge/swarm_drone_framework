@@ -96,8 +96,8 @@ class Phase1Simulation:
         self.auction_results: list[tuple[str, int, float]] = [] # task_id, winner_id, time
 
         # Phase 3D: Global Connectivity Telemetry log
-        # stores: list of (timestamp, largest_component_size, component_count, connectivity_ratio)
-        self.connectivity_log: list[tuple[float, int, int, float]] = []
+        # stores time-series dictionary metrics
+        self.connectivity_log: list[dict] = []
 
         # ── Register handlers ───────────────────────────────
         self.kernel.register_handler(
@@ -403,13 +403,20 @@ class Phase1Simulation:
 
         # Phase 3D: Global connectivity metrics compilation
         # Fully centralized analytical operation; agents are blind to this.
-        from src.metrics.connectivity_metrics import compute_largest_connected_component
+        from src.metrics.connectivity_metrics import compute_connectivity_metrics
         
         all_pos = self._get_all_positions()
-        lcc_size, comp_count, conn_ratio = compute_largest_connected_component(
+        metrics = compute_connectivity_metrics(
             all_pos, self.config.comm_radius
         )
-        self.connectivity_log.append((t, lcc_size, comp_count, conn_ratio))
+        
+        self.connectivity_log.append({
+            "time": t,
+            "lcc": metrics["largest_component"],
+            "component_count": metrics["component_count"],
+            "connectivity_ratio": metrics["connectivity_ratio"],
+            "spectral_gap_placeholder": 0.0
+        })
 
         # Schedule next metrics log
         next_t = t + self.config.dt * 5  # Log every 5 dt intervals

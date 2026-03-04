@@ -165,6 +165,25 @@ def run_experiment(config_path: str, profile: bool = False) -> dict:
         print(f"  Energy non-negative:      {results['energy_all_non_negative']}")
         print("=" * 60)
 
+        if hasattr(sim, 'connectivity_log') and len(sim.connectivity_log) > 0:
+            log = sim.connectivity_log
+            ratios = [entry["connectivity_ratio"] for entry in log]
+            print("\n  Connectivity Time-Series Summary")
+            print("  --------------------------------")
+            print(f"  min_connectivity_ratio:     {min(ratios):.3f}")
+            print(f"  max_connectivity_ratio:     {max(ratios):.3f}")
+            print(f"  average_connectivity_ratio: {sum(ratios)/len(ratios):.3f}")
+            print(f"  final_connectivity_ratio:   {ratios[-1]:.3f}")
+            print(f"  total_components_detected:  {sum(entry['component_count'] for entry in log)}")
+            print("\n  Sample Time-Series Data:")
+            for i, entry in enumerate(log):
+                if i < 5 or i >= len(log) - 2:
+                    print(f"  {entry}")
+                elif i == 5:
+                    print("  ...")
+            print()
+            print("=" * 60)
+
         # Per-agent energy snapshot (first 10 + last 10)
         print(f"\n  {'Agent':>6} {'Energy':>10} {'Alive':>6}")
         print(f"  {'-'*6} {'-'*10} {'-'*6}")

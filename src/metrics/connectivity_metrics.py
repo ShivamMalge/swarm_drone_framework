@@ -84,3 +84,12 @@ def compute_largest_connected_component(
     connectivity_ratio = largest_component_size / n
 
     return largest_component_size, component_count, connectivity_ratio
+
+def compute_connectivity_metrics(agent_positions: np.ndarray, comm_radius: float) -> dict:
+    """Wrapper that returns connectivity metrics in dictionary format."""
+    lcc, count, ratio = compute_largest_connected_component(agent_positions, comm_radius)
+    return {
+        "largest_component": lcc,
+        "component_count": count,
+        "connectivity_ratio": ratio
+    }
