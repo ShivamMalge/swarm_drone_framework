@@ -437,7 +437,7 @@ class AgentCore:
             self.auction_participation, self.velocity_scale
         ]
         
-        shift = sum(abs(n - o) for n, o in zip(new_params, old_params))
+        shift = sum(abs(n - o) for n, o in zip(new_params, old_params)) / len(new_params)
         
         if shift > 0.0:
             self.total_tuning_updates += 1

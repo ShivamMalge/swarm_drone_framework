@@ -214,9 +214,10 @@ def run_experiment(config_path: str, profile: bool = False) -> dict:
             print()
             
             p_updates = alog[-1]['total_tuning_updates']
-            p_shifts = [e['total_parameter_shift'] for e in alog]
+            final_shift = alog[-1]['total_parameter_shift']
             m_shifts = [e['max_parameter_shift'] for e in alog]
-            avg_shift = sum(p_shifts) / len(p_shifts) if p_shifts else 0.0
+            
+            avg_shift = final_shift / p_updates if p_updates > 0 else 0.0
             max_s = max(m_shifts) if m_shifts else 0.0
             
             print("============================================================")
