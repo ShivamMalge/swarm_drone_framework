@@ -100,6 +100,9 @@ class SimConfig:
     # Phase 2C: Auction
     auction_timeout: float = 5.0
 
+    # Phase 4B: Control Tuning
+    tuning_alpha: float = 0.15
+
     # Phase 2D: Regime Detection
     regime: RegimeConfig = field(default_factory=RegimeConfig)
 

@@ -26,6 +26,7 @@ from src.regime.classifier import Regime, RegimeClassifier
 from src.regime.telemetry_buffer import TelemetryBuffer, TelemetrySnapshot
 from src.adaptation.hybrid_supervisor import HybridSupervisor, Strategy
 from src.adaptation.safety_projector import project_to_theta_safe
+from src.adaptation.stability_tuner import smooth_update
 
 
 @dataclass
@@ -74,6 +75,7 @@ class AgentCore:
         coverage_enabled: bool = False,
         comm_radius: float = 20.0,
         regime_config: RegimeConfig | None = None,
+        tuning_alpha: float = 0.15,
     ) -> None:
         self.agent_id = agent_id
         self._position: np.ndarray = position.copy()
@@ -108,6 +110,12 @@ class AgentCore:
         self.auction_participation: float = 1.0
         self.velocity_scale: float = 1.0
         self.projection_events: int = 0
+        
+        # Phase 4B: Stability Constrained Tuning
+        self.tuning_alpha = tuning_alpha
+        self.total_tuning_updates: int = 0
+        self.total_parameter_shift: float = 0.0
+        self.max_parameter_shift: float = 0.0
         
         # Stored initial states
         self._base_epsilon = 0.05
@@ -407,16 +415,35 @@ class AgentCore:
             
     def _apply_strategy_parameters(self, theta_proposed: dict[str, float]) -> None:
         """
-        Projects proposed modifications onto the Safe Manifold.
-        Records clipping events when boundary assertions are necessary.
+        Projects proposed modifications onto the Safe Manifold, then smoothly
+        interpolates current agent bounds toward the required targets.
         """
         theta_safe, clip_count = project_to_theta_safe(theta_proposed)
         
-        self.coverage_gain = theta_safe.get("coverage_gain", self.coverage_gain)
-        self.gossip_epsilon = theta_safe.get("gossip_epsilon", self.gossip_epsilon)
-        self.broadcast_rate = theta_safe.get("broadcast_rate", self.broadcast_rate)
-        self.auction_participation = theta_safe.get("auction_participation", self.auction_participation)
-        self.velocity_scale = theta_safe.get("velocity_scale", self.velocity_scale)
+        old_params = [
+            self.coverage_gain, self.gossip_epsilon, self.broadcast_rate, 
+            self.auction_participation, self.velocity_scale
+        ]
+        
+        # Phase 4B: Apply exponential moving average stability smoothing
+        self.coverage_gain = smooth_update(self.coverage_gain, theta_safe.get("coverage_gain", self.coverage_gain), self.tuning_alpha)
+        self.gossip_epsilon = smooth_update(self.gossip_epsilon, theta_safe.get("gossip_epsilon", self.gossip_epsilon), self.tuning_alpha)
+        self.broadcast_rate = smooth_update(self.broadcast_rate, theta_safe.get("broadcast_rate", self.broadcast_rate), self.tuning_alpha)
+        self.auction_participation = smooth_update(self.auction_participation, theta_safe.get("auction_participation", self.auction_participation), self.tuning_alpha)
+        self.velocity_scale = smooth_update(self.velocity_scale, theta_safe.get("velocity_scale", self.velocity_scale), self.tuning_alpha)
+        
+        new_params = [
+            self.coverage_gain, self.gossip_epsilon, self.broadcast_rate, 
+            self.auction_participation, self.velocity_scale
+        ]
+        
+        shift = sum(abs(n - o) for n, o in zip(new_params, old_params))
+        
+        if shift > 0.0:
+            self.total_tuning_updates += 1
+            self.total_parameter_shift += shift
+            if shift > self.max_parameter_shift:
+                self.max_parameter_shift = shift
         
         self.projection_events += clip_count
 

@@ -38,6 +38,7 @@ def load_config(yaml_path: str) -> SimConfig:
     energy = raw.get("energy", {})
     comm = raw.get("communication", {})
     vel = raw.get("velocity", {})
+    control = raw.get("control", {})
 
     return SimConfig(
         num_agents=sim.get("num_agents", 50),
@@ -57,6 +58,7 @@ def load_config(yaml_path: str) -> SimConfig:
         latency_min=comm.get("latency_min", 0.05),
         v_max=vel.get("v_max", 2.0),
         r_collision=vel.get("r_collision", 0.5),
+        tuning_alpha=control.get("tuning_alpha", 0.15),
     )
 
 
@@ -210,7 +212,22 @@ def run_experiment(config_path: str, profile: bool = False) -> dict:
             print(f"  velocity_scale range:     [{min(v_scl):.2f}, {max(v_scl):.2f}]")
             print(f"  total_projection_events:  {alog[-1]['projection_events']}")
             print()
-            print("=" * 60)
+            
+            p_updates = alog[-1]['total_tuning_updates']
+            p_shifts = [e['total_parameter_shift'] for e in alog]
+            m_shifts = [e['max_parameter_shift'] for e in alog]
+            avg_shift = sum(p_shifts) / len(p_shifts) if p_shifts else 0.0
+            max_s = max(m_shifts) if m_shifts else 0.0
+            
+            print("============================================================")
+            print("  Stability Constrained Tuning Summary")
+            print("  ----------------------------------------------------------")
+            print(f"  tuning_alpha:              {config.tuning_alpha}")
+            print(f"  total_tuning_updates:      {p_updates}")
+            print(f"  average_parameter_shift:   {avg_shift:.4f}")
+            print(f"  max_parameter_shift:       {max_s:.4f}")
+            print()
+            print("============================================================")
 
         # Per-agent energy snapshot (first 10 + last 10)
         print(f"\n  {'Agent':>6} {'Energy':>10} {'Alive':>6}")

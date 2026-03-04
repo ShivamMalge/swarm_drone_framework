@@ -438,7 +438,10 @@ class Phase1Simulation:
                 "broadcast_rate": sum(a.broadcast_rate for a in alive_agents) / len(alive_agents),
                 "auction_participation": sum(a.auction_participation for a in alive_agents) / len(alive_agents),
                 "velocity_scale": sum(a.velocity_scale for a in alive_agents) / len(alive_agents),
-                "projection_events": sum(a.projection_events for a in self.agents)
+                "projection_events": sum(a.projection_events for a in self.agents),
+                "total_tuning_updates": sum(a.total_tuning_updates for a in self.agents),
+                "total_parameter_shift": sum(a.total_parameter_shift for a in self.agents),
+                "max_parameter_shift": max((a.max_parameter_shift for a in self.agents), default=0.0)
             })
 
         # Schedule next metrics log
