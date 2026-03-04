@@ -24,6 +24,7 @@ from src.agent.local_map import LocalMap
 from src.core.config import RegimeConfig
 from src.regime.classifier import Regime, RegimeClassifier
 from src.regime.telemetry_buffer import TelemetryBuffer, TelemetrySnapshot
+from src.adaptation.hybrid_supervisor import HybridSupervisor, Strategy
 
 
 @dataclass
@@ -95,6 +96,17 @@ class AgentCore:
         self.regime_classifier = RegimeClassifier(config=reg_cfg)
         self.current_regime = Regime.STABLE
 
+        # Phase 3C: Adaptive Hybrid Supervisor
+        self.supervisor = HybridSupervisor()
+        self.current_strategy = Strategy.NORMAL_OPERATION
+        
+        # Adjustable Local Parameters
+        self._broadcast_rate_multiplier: float = 1.0
+        self._gossip_weight_multiplier: float = 1.0
+        self._auction_enabled: bool = True
+        self._coverage_active: bool = coverage_enabled
+        self._broadcast_enabled: bool = True
+
     # ── Position ────────────────────────────────────────────
 
     @property
@@ -129,7 +141,7 @@ class AgentCore:
         if not self.is_alive:
             return np.zeros(2)
 
-        if self._coverage_enabled:
+        if self._coverage_active:
             from src.coordination.voronoi_coverage import compute_local_centroid
             
             neighbors = self._local_map.get_all_neighbors()
@@ -207,8 +219,11 @@ class AgentCore:
 
     # ── Communication ───────────────────────────────────────
 
-    def prepare_broadcast(self, current_time: float) -> AgentMessage:
+    def prepare_broadcast(self, current_time: float) -> AgentMessage | None:
         """Create an outgoing message with current state snapshot."""
+        if not self._broadcast_enabled:
+            return None
+            
         # Phase 2C: Attach one random known auction bid to gossip (O(1) payload size)
         auction_bid = None
         if self._local_map.active_auctions:
@@ -276,8 +291,11 @@ class AgentCore:
         neighbors = self._local_map.get_all_neighbors()
         neighbor_states = [nb.consensus_state for nb in neighbors]
         
+        # Apply local tuning
+        effective_epsilon = epsilon * self._gossip_weight_multiplier
+        
         self.consensus_state = compute_gossip_update(
-            self.consensus_state, neighbor_states, epsilon
+            self.consensus_state, neighbor_states, effective_epsilon
         )
 
     # ── Auction (called by AUCTION handlers) ────────────────
@@ -292,7 +310,7 @@ class AgentCore:
         Process a newly spawned task. Compute local bid and cache it.
         The bid will naturally gossip out via periodic MSG_TRANSMIT.
         """
-        if not self.is_alive:
+        if not self.is_alive or not self._auction_enabled:
             return
             
         from src.coordination.auction import compute_bid
@@ -312,7 +330,7 @@ class AgentCore:
         Evaluate if this agent won the auction based on its LocalMap.
         Returns True if won, False otherwise.
         """
-        if not self.is_alive:
+        if not self.is_alive or not self._auction_enabled:
             return False
             
         from src.coordination.auction import resolve_local_winner
@@ -365,3 +383,41 @@ class AgentCore:
         if self.telemetry_buffer.is_ready():
             smoothed_metrics = self.telemetry_buffer.get_smoothed_metrics()
             self.current_regime = self.regime_classifier.classify(smoothed_metrics)
+            
+            # 5. Phase 3C: Pass regime to supervisor to select active strategy
+            self.current_strategy = self.supervisor.select_strategy(self.current_regime)
+            self._apply_strategy_parameters()
+            
+    def _apply_strategy_parameters(self) -> None:
+        """
+        Translates the global functional intent behind the chosen Strategy
+        into explicit concrete tuning of internal boolean and float dials.
+        """
+        # Reset defaults before applying diffs
+        self._coverage_active = self._coverage_enabled
+        self._broadcast_enabled = True
+        self._auction_enabled = True
+        self._broadcast_rate_multiplier = 1.0
+        self._gossip_weight_multiplier = 1.0
+        
+        if self.current_strategy == Strategy.NORMAL_OPERATION:
+            pass # Use defaults
+            
+        elif self.current_strategy == Strategy.CONSENSUS_PRIORITY:
+            self._gossip_weight_multiplier = 1.5
+            self._auction_enabled = False # Suspend auction during data fault tolerance
+            
+        elif self.current_strategy == Strategy.CONNECTIVITY_RECOVERY:
+            self._coverage_active = False # Stop scattering to heal graph
+            self._gossip_weight_multiplier = 2.0
+            self._auction_enabled = False
+            
+        elif self.current_strategy == Strategy.ENERGY_CONSERVATION:
+            self._broadcast_rate_multiplier = 0.5
+            self._auction_enabled = False
+            self._coverage_active = False # Conserve kinematic movement energy
+            
+        elif self.current_strategy == Strategy.LATENCY_STABILIZATION:
+            self._broadcast_rate_multiplier = 0.5 # Slow emissions to de-saturate heavily delayed airwaves
+            self._gossip_weight_multiplier = 0.5  # Modulate epsilon down during massive delay to preserve spectral bounds
+
