@@ -82,14 +82,79 @@ def compute_largest_connected_component(
     largest_component_size = max(components) if components else 0
     component_count = len(components)
     connectivity_ratio = largest_component_size / n
-
     return largest_component_size, component_count, connectivity_ratio
 
+def compute_spectral_gap(adj: dict[int, list[int]], n: int) -> float:
+    """
+    Compute algebraic connectivity (lambda_2 of Laplacian).
+    """
+    if n <= 1:
+        return 0.0
+        
+    # Build Laplacian L = D - A
+    L = np.zeros((n, n), dtype=float)
+    
+    for u in adj:
+        degree = len(adj[u])
+        L[u, u] = degree
+        for v in adj[u]:
+            L[u, v] = -1.0
+            
+    # Compute eigenvalues
+    try:
+        eigvals = np.linalg.eigvals(L)
+        # Sort real components
+        eigvals = np.sort(np.real(eigvals))
+        return float(eigvals[1])
+    except np.linalg.LinAlgError:
+        return 0.0
+
 def compute_connectivity_metrics(agent_positions: np.ndarray, comm_radius: float) -> dict:
-    """Wrapper that returns connectivity metrics in dictionary format."""
-    lcc, count, ratio = compute_largest_connected_component(agent_positions, comm_radius)
+    """Wrapper that returns connectivity metrics including lambda_2 in dictionary format."""
+    n = len(agent_positions)
+    if n == 0:
+        return {
+            "largest_component": 0,
+            "component_count": 0,
+            "connectivity_ratio": 0.0,
+            "spectral_gap": 0.0
+        }
+
+    tree = KDTree(agent_positions)
+    pairs = tree.query_pairs(comm_radius)
+
+    adj = {i: [] for i in range(n)}
+    for u, v in pairs:
+        adj[u].append(v)
+        adj[v].append(u)
+
+    visited = set()
+    components = []
+
+    for i in range(n):
+        if i not in visited:
+            comp_size = 0
+            queue = [i]
+            visited.add(i)
+            
+            while queue:
+                u = queue.pop(0)
+                comp_size += 1
+                for v in adj[u]:
+                    if v not in visited:
+                        visited.add(v)
+                        queue.append(v)
+                        
+            components.append(comp_size)
+
+    lcc = max(components) if components else 0
+    count = len(components)
+    ratio = lcc / n
+    gap = compute_spectral_gap(adj, n)
+
     return {
         "largest_component": lcc,
         "component_count": count,
-        "connectivity_ratio": ratio
+        "connectivity_ratio": ratio,
+        "spectral_gap": gap
     }

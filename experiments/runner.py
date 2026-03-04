@@ -168,6 +168,7 @@ def run_experiment(config_path: str, profile: bool = False) -> dict:
         if hasattr(sim, 'connectivity_log') and len(sim.connectivity_log) > 0:
             log = sim.connectivity_log
             ratios = [entry["connectivity_ratio"] for entry in log]
+            gaps = [entry["spectral_gap"] for entry in log]
             print("\n  Connectivity Time-Series Summary")
             print("  --------------------------------")
             print(f"  min_connectivity_ratio:     {min(ratios):.3f}")
@@ -175,6 +176,14 @@ def run_experiment(config_path: str, profile: bool = False) -> dict:
             print(f"  average_connectivity_ratio: {sum(ratios)/len(ratios):.3f}")
             print(f"  final_connectivity_ratio:   {ratios[-1]:.3f}")
             print(f"  total_components_detected:  {sum(entry['component_count'] for entry in log)}")
+            
+            print("\n  Spectral Gap Summary")
+            print("  --------------------")
+            print(f"  min_spectral_gap:           {min(gaps):.4f}")
+            print(f"  max_spectral_gap:           {max(gaps):.4f}")
+            print(f"  average_spectral_gap:       {sum(gaps)/len(gaps):.4f}")
+            print(f"  final_spectral_gap:         {gaps[-1]:.4f}")
+            
             print("\n  Sample Time-Series Data:")
             for i, entry in enumerate(log):
                 if i < 5 or i >= len(log) - 2:

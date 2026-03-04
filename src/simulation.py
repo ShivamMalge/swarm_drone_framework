@@ -415,7 +415,7 @@ class Phase1Simulation:
             "lcc": metrics["largest_component"],
             "component_count": metrics["component_count"],
             "connectivity_ratio": metrics["connectivity_ratio"],
-            "spectral_gap_placeholder": 0.0
+            "spectral_gap": metrics["spectral_gap"]
         })
 
         # Schedule next metrics log
