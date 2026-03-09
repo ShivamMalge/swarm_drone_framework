@@ -1,0 +1,32 @@
+# Stress Test Configuration: N=100 Agents
+# Phase 1 stability validation — no coordination, no regime detection
+
+simulation:
+  num_agents: 100
+  grid_width: 200.0
+  grid_height: 200.0
+  comm_radius: 70.0       # Recalibrated logic: ~29 neighbors, 100% connected
+  max_time: 100.0
+  dt: 1.0
+  seed: 42
+
+energy:
+  initial: 100.0
+  p_move: 0.1
+  p_comm: 0.05
+  p_idle: 0.001
+
+communication:
+  p_drop: 0.2
+  psi_max: 0.3
+  latency_mean: 0.5
+  latency_min: 0.05
+
+interference:
+  mode: gaussian_blob
+  center: [100.0, 100.0]
+  sigma: 40.0
+
+velocity:
+  v_max: 2.0
+  r_collision: 0.5
