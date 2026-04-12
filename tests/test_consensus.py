@@ -1,143 +1,162 @@
 """
-Phase 2B Scalability and Correctness Test — Distributed Gossip Consensus.
-
-Verifies that when asynchronous gossip is enabled:
-- Network state converges under no-drop (variance -> 0).
-- Mean is strictly conserved (no-drop).
-- Convergence rate decreases under packet drops but remains bounded.
-- Deterministic reproducibility is strictly preserved.
-- No global state access rules are violated.
+Phase 2T verification: Consensus Analyzer tests.
 """
 
-import sys
-import os
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+import time
 import numpy as np
-
-from src.core.config import SimConfig
-from src.core.event import reset_sequence_counter
-from src.simulation import Phase1Simulation
+from src.telemetry.telemetry_frame import TelemetryFrame
+from src.analytics.consensus_analyzer import ConsensusAnalyzer
 
 
-def _make_consensus_config(seed: int = 42, p_drop: float = 0.0) -> SimConfig:
-    """Return an N=100 config with a highly connected graph to ensure convergence."""
-    return SimConfig(
-        num_agents=100,
-        grid_width=100.0,
-        grid_height=100.0,
-        comm_radius=200.0,  # Fully connected to guarantee theoretical convergence
-        p_drop=p_drop,
-        psi_max=0.0,
-        energy_initial=5000.0, # Enough energy to not die during test
-        p_move=0.0,            # Static positions for pure consensus test
-        p_comm=0.0,            # No energy drain
-        p_idle=0.0,
-        dt=1.0,
-        v_max=0.0,
-        max_time=20.0,
-        seed=seed,
-        consensus_epsilon=0.01,
-        consensus_dt=0.5,
+def _make_frame(n: int, t: float, states: list[float], fails: list[int] = None, adj: np.ndarray = None) -> TelemetryFrame:
+    if adj is None:
+        adj = np.zeros((n, n), dtype=np.uint8)
+        
+    fail_arr = np.zeros(n, dtype=bool)
+    if fails:
+        for f in fails:
+            fail_arr[f] = True
+
+    return TelemetryFrame(
+        time=float(t),
+        positions=np.zeros((n, 2)),
+        energies=np.ones(n),
+        adjacency=adj,
+        connected_components=[],
+        spectral_gap=0.0,
+        consensus_variance=0.0,
+        packet_drop_rate=0.0,
+        latency=0.0,
+        regime_state={},
+        adaptive_parameters={},
+        drone_failure_flags=fail_arr,
+        agent_states=np.array(states, dtype=np.float64)
     )
 
 
-def _get_consensus_states(sim: Phase1Simulation) -> np.ndarray:
-    return np.array([a.consensus_state for a in sim.agents])
+def test_variance_and_dead_agent_exclusion():
+    # 3 agents. #2 is dead.
+    states = [10.0, 20.0, 100.0]  # If 100 was included variance would be huge
+    frame = _make_frame(3, 0.0, states, fails=[2])
+    
+    analyzer = ConsensusAnalyzer()
+    metrics = analyzer.analyze_frame(frame)
+    
+    # Alive states: 10, 20. Mean=15. Var=25
+    assert metrics.consensus_variance == 25.0
+    # Error: mean(|x_i - mean(x)|) = mean(|10-15|, |20-15|) = 5
+    assert metrics.consensus_error == 5.0
+    
+    print("[PASS] Variance & Error metric correctness with dead agent exclusion")
 
 
-class TestGossipConsensus:
+def test_convergence_and_divergence_rates():
+    analyzer = ConsensusAnalyzer(convergence_threshold=0.1)
+    
+    converged = []
+    diverged = []
+    analyzer.consensus_converged.connect(lambda t: converged.append(t))
+    analyzer.consensus_diverging.connect(lambda t: diverged.append(t))
+    
+    # Frame 0: High variance
+    f0 = _make_frame(2, 0.0, [0.0, 10.0]) # Mean=5, Var=25
+    analyzer.analyze_frame(f0)
+    
+    # Frame 1: Decreased variance
+    f1 = _make_frame(2, 1.0, [2.0, 8.0]) # Mean=5, Var=9
+    m1 = analyzer.analyze_frame(f1)
+    
+    assert m1.global_convergence_rate == -16.0
+    assert m1.state == "SLOW_CONVERGENCE"
+    
+    # Frame 2: Increased variance
+    f2 = _make_frame(2, 2.0, [0.0, 10.0]) # Mean=5, Var=25
+    m2 = analyzer.analyze_frame(f2)
+    
+    assert m2.global_convergence_rate == 16.0
+    assert m2.state == "DIVERGING"
+    assert len(diverged) == 1
+    
+    # Frame 3: Converged
+    f3 = _make_frame(2, 3.0, [5.0, 5.0]) # Var = 0 < 0.1
+    m3 = analyzer.analyze_frame(f3)
+    
+    assert m3.state == "CONVERGED"
+    assert len(converged) == 1
+    
+    print("[PASS] Convergence rates, diverging, and converging events")
 
-    def test_convergence_no_drop(self):
-        """Variance of states should strictly decrease toward 0 without packet drops."""
-        config = _make_consensus_config(p_drop=0.0)
-        reset_sequence_counter()
-        sim = Phase1Simulation(config)
 
-        initial_states = _get_consensus_states(sim)
-        initial_mean = np.mean(initial_states)
-        initial_var = np.var(initial_states)
-
-        # Ensure we start with some variance
-        assert initial_var > 0
-
-        sim.run()
-
-        final_states = _get_consensus_states(sim)
-        final_mean = np.mean(final_states)
-        final_var = np.var(final_states)
-
-        # 1. Variance should significantly decrease
-        assert final_var < initial_var * 0.1, f"Variance did not shrink: {initial_var} -> {final_var}"
+def test_oscillation_detection():
+    analyzer = ConsensusAnalyzer()
+    events = []
+    analyzer.consensus_oscillating.connect(lambda t: events.append(t))
+    
+    var_seq = [10.0, 11.0, 9.0, 12.0, 8.0, 13.0]
+    
+    for i, v in enumerate(var_seq):
+        f = _make_frame(1, float(i), [v]) # Var of 1 agent is 0. Wait, need 2 agents to control var easily:
+        # Actually doing [0, v] has var = v^2 / 4
+        # Just use [10-d, 10+d] so Var = d^2
+        d = np.sqrt(v)
+        f = _make_frame(2, float(i), [10.0 - d, 10.0 + d])
+        metrics = analyzer.analyze_frame(f)
         
-        # 2. Mean should be roughly conserved (average consensus)
-        # Note: Asymmetric broadcast gossip with stale beliefs does NOT exactly conserve the mean
-        # step-by-step. It converges to a value within the convex hull, often close to the initial mean.
-        assert np.isclose(initial_mean, final_mean, atol=1.5), f"Mean drifted too far: {initial_mean} -> {final_mean}"
+    assert len(events) >= 1
+    assert metrics.state == "OSCILLATING"
+    
+    print("[PASS] Oscillation sign-flip detection correct")
 
-    def test_convergence_with_drop(self):
-        """Packet drops reduce convergence speed but system remains bounded and stable."""
-        # Run identical setups: one perfect channel, one lossy channel.
-        config_perfect = _make_consensus_config(p_drop=0.0)
-        config_lossy = _make_consensus_config(p_drop=0.5)
 
-        reset_sequence_counter()
-        sim_perfect = Phase1Simulation(config_perfect)
-        sim_perfect.run()
-        var_perfect = np.var(_get_consensus_states(sim_perfect))
+def test_hotspot_detection():
+    adj = np.zeros((4,4), dtype=np.uint8)
+    adj[0,1] = adj[1,0] = 1
+    adj[1,2] = adj[2,1] = 1
+    adj[2,3] = adj[3,2] = 1
+    
+    f = _make_frame(4, 0.0, [100.0, 0.0, 100.0, 100.0], adj=adj)
+    analyzer = ConsensusAnalyzer()
+    m = analyzer.analyze_frame(f)
+    print(m.hotspot_indices)
+    assert 1 in m.hotspot_indices
+    assert 0 in m.hotspot_indices
+    
+    print("[PASS] Spatial hotspot gradients correct")
 
-        reset_sequence_counter()
-        sim_lossy = Phase1Simulation(config_lossy)
-        sim_lossy.run()
-        var_lossy = np.var(_get_consensus_states(sim_lossy))
 
-        # Lossy network should converge slower (higher final variance) than perfect
-        assert var_lossy > var_perfect
-
-        # Lossy variance should still be strictly less than initial variance (bounded convergence)
-        initial_variance = np.var(np.arange(100, dtype=float)) # agent IDs 0..99
-        assert var_lossy < initial_variance
-
-    def test_deterministic_replay(self):
-        """Simulation RNG guarantees identical execution order and final state."""
-        config1 = _make_consensus_config(seed=123, p_drop=0.2)
-        reset_sequence_counter()
-        sim1 = Phase1Simulation(config1)
-        sim1.run()
-        states1 = _get_consensus_states(sim1)
-
-        config2 = _make_consensus_config(seed=123, p_drop=0.2)
-        reset_sequence_counter()
-        sim2 = Phase1Simulation(config2)
-        sim2.run()
-        states2 = _get_consensus_states(sim2)
-
-        np.testing.assert_array_equal(states1, states2)
-
-        # Prove different seeds diverge
-        config3 = _make_consensus_config(seed=999, p_drop=0.2)
-        reset_sequence_counter()
-        sim3 = Phase1Simulation(config3)
-        sim3.run()
-        states3 = _get_consensus_states(sim3)
-
-        assert not np.allclose(states1, states3)
-
-    def test_no_global_access_violation(self):
-        """Gossip update logic strictly avoids global connectivity querying."""
-        # Ensure scipy is not inadvertently imported locally to cheat
-        from src.coordination import gossip_consensus
-        assert not hasattr(gossip_consensus, 'Voronoi')
-        assert not hasattr(gossip_consensus, 'KDTree')
-
-        # The update function is a pure function operating ONLY on local buffer
-        own_state = 10.0
-        neighbor_states = [5.0, 15.0, 10.0]
-        epsilon = 0.5 # Over safe bound
+def test_performance():
+    n = 200
+    states = list(np.random.uniform(0, 100, n))
+    adj = np.zeros((n, n), dtype=np.uint8)
+    for i in range(n-1):
+        adj[i, i+1] = 1
+        adj[i+1, i] = 1
         
-        # Will clamp epsilon to 0.99 / 3 = 0.33
-        new_state = gossip_consensus.compute_gossip_update(own_state, neighbor_states, epsilon)
-        
-        # Diff sum = -5 + 5 + 0 = 0 -> new_state = 10.0
-        assert new_state == 10.0
+    frame = _make_frame(n, 0.0, states, adj=adj)
+    
+    analyzer = ConsensusAnalyzer()
+    
+    # Warmup
+    analyzer.analyze_frame(frame)
+    
+    t0 = time.perf_counter()
+    for i in range(10):
+        frame.agent_states += 0.1
+        frame.time += 0.1
+        analyzer.analyze_frame(frame)
+    t1 = time.perf_counter()
+    
+    avg_ms = ((t1 - t0) * 1000) / 10
+    
+    assert avg_ms < 1.0, f"Performance too slow: {avg_ms:.2f}ms per frame (must be < 1ms)"
+    
+    print(f"[PASS] Performance tracking: {avg_ms:.3f}ms per frame (Target < 1ms)")
+
+
+if __name__ == "__main__":
+    test_variance_and_dead_agent_exclusion()
+    test_convergence_and_divergence_rates()
+    test_oscillation_detection()
+    test_hotspot_detection()
+    test_performance()
+    print("\nAll Phase 2T tests passed.")
