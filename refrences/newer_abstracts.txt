@@ -1,0 +1,129 @@
+\n--- 0212212v1.pdf ---\narXiv:math/0212212v1  [math.OC]  16 Dec 2002
+SUBMITTED AS A REGULAR PAPER TO IEEE TRANSACTIONS ON ROBOTICS AND AUTOMATION
+1
+Coverage control for mobile sensing networks
+Jorge Cort´es, Sonia Mart´ınez, Timur Karatas, Francesco Bullo, Member IEEE
+Abstract—This paper presents control and coordination al-
+gorithms for groups of vehicles. The focus is on autonomous
+vehicle networks performing distributed sensing tasks where
+each vehicle plays the role of a mobile tunable sensor. The
+paper proposes gradient descent algorithms for a class of
+utility functions which encode optimal coverage and sens-
+ing policies. The resulting closed-loop behavior is adaptive,
+distributed, asynchronous, and veriﬁably correct.
+Keywords—
+Coverage
+control,
+distributed
+and
+asyn-
+chronous algorithms, centroidal Voronoi partitions
+I. Introduction
+Mobile sensing networks
+The deployment of large groups of autonomous vehi-
+cles is rapidly becoming possible because of technological
+advances in networking and in miniaturization of electro-
+mechanical systems. In the near future large numbers of
+robots will coordinate their actions through ad-hoc com-
+munication networks and will perform challenging tasks
+including search and recovery operations, manipulation in
+hazardous environments, exploration, surveillance, and en-
+vironmental monitoring for pollution detection and esti-
+mation. The potential advantages of employing teams of
+agents are numerous. For instance, certain tasks are diﬃ-
+cult, if not impossible, \n--- 1705.02723v3.pdf ---\narXiv:1705.02723v3  [cs.IT]  6 Jan 2018
+1
+Joint Trajectory and Communication Design for
+Multi-UAV Enabled Wireless Networks
+Qingqing Wu, Member, IEEE, Yong Zeng, Member, IEEE, and Rui Zhang, Fellow, IEEE
+Abstract—Unmanned aerial vehicles (UAVs) have attracted
+signiﬁcant interest recently in assisting wireless communication
+due to their high maneuverability, ﬂexible deployment, and
+low cost. This paper considers a multi-UAV enabled wireless
+communication system, where multiple UAV-mounted aerial base
+stations (BSs) are employed to serve a group of users on the
+ground. To achieve fair performance among users, we maximize
+the minimum throughput over all ground users in the down-
+link communication by optimizing the multiuser communication
+scheduling and association jointly with the UAVs’ trajectory and
+power control. The formulated problem is a mixed integer non-
+convex optimization problem that is challenging to solve. As
+such, we propose an efﬁcient iterative algorithm for solving it
+by applying the block coordinate descent and successive convex
+optimization techniques. Speciﬁcally, the user scheduling and
+association, UAV trajectory, and transmit power are alternately
+optimized in each iteration. In particular, for the non-convex UAV
+trajectory and transmit power optimization problems, two ap-
+proximate convex optimization problems are solved, respectively.
+We further show that the proposed algorithm is guaranteed to
+converge. To speed up the algorithm convergence and achieve\n--- 37402.37406.pdf ---\n(~) ~ 
+Computer Graphics, Volume 21, Number 4, July 1987 
+Flocks, Herds, and Schools: A Distributed Behavioral Model 
+Craig W. Reynolds 
+Symbolics Graphics Division 
+1401 Westwood Boulevard 
+Los Angeles, California 90024 
+(Electronic mail: cwr@Symbolics.COM) 
+Abstract 
+The aggregate motion of a flock of birds, a herd of land ani- 
+mals, or a school of fish is a beautiful and familiar part of the 
+natural world. But this type of complex motion is rarely seen in 
+computer animation. This paper explores an approach based 
+on simulation as an alternative to scripting the paths of each 
+bird individually. The simulated flock is an elaboration of a 
+particle system, with the simulated birds being the particles. 
+The aggregate motion of the simulated flock is created by a 
+distributed behavioral model much like that at work in a natu- 
+ral flock; the birds choose their own course. Each simulated 
+bird is implemented as an independent actor that navigates ac- 
+cording to its local perception of the dynamic environment, the 
+laws of simulated physics that rule its motion, and a set of 
+behaviors programmed into it by the "animator." The aggre- 
+gate motion of the simulated flock is the result of the dense 
+interaction of the relatively simple behaviors of the individual 
+simulated birds. 
+Categories and Subject Descriptors: 1.2.10 [Artificial Intelli- 
+gence]: Vision and Scene Understanding; 1.3.5 [Computer 
+Graphics]: Computational Geometry and Object Modeling; 
+1.3.7 [Computer Graph\n--- dias06market.pdf ---\nMarket-Based Multirobot Coordination:
+A Survey and Analysis
+M. Bernardine Dias, Robert Zlot, Nidhi Kalra, and Anthony Stentz
+CMU-RI-TR-05-13
+April 2005
+Robotics Institute
+Carnegie Mellon University
+Pittsburgh, Pennsylvania 15213
+c⃝Carnegie Mellon University
+\n--- yang2010graphconn.pdf ---\nAutomatica 46 (2010) 390–396
+Contents lists available at ScienceDirect
+Automatica
+journal homepage: www.elsevier.com/locate/automatica
+Brief paper
+Decentralized estimation and control of graph connectivity for mobile
+sensor networks
+$
+P. Yang a, R.A. Freeman b,∗, G.J. Gordon c, K.M. Lynch a, S.S. Srinivasa d, R. Sukthankar d
+a Department of Mechanical Engineering, Northwestern University, Evanston, IL 60208-3111, United States
+b Department of Electrical Engineering and Computer Science, Northwestern University, Evanston, IL 60208-3118, United States
+c School of Computer Science, Carnegie Mellon University, Pittsburgh, PA 15213, United States
+d Intel Research, Pittsburgh, PA 15213, United States
+a r t i c l e
+i n f o
+Article history:
+Received 17 September 2008
+Received in revised form
+20 July 2009
+Accepted 5 November 2009
+Available online 11 December 2009
+Keywords:
+Connectivity
+Decentralized control
+Graph theory
+Numerical algorithms
+Autonomous mobile robots
+a b s t r a c t
+The ability of a robot team to reconfigure itself is useful in many applications: for metamorphic robots
+to change shape, for swarm motion towards a goal, for biological systems to avoid predators, or for
+mobile buoys to clean up oil spills. In many situations, auxiliary constraints, such as connectivity between
+team members or limits on the maximum hop-count, must be satisfied during reconfiguration. In this
+paper, we show that both the estimation and control of the graph connectivity can be accomplished in

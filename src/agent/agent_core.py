@@ -38,6 +38,7 @@ class AgentMessage:
     energy: float
     consensus_state: float
     send_time: float
+    tx_radius: float  # Phase 1: Dynamic Transmission Power
     
     # Phase 2C
     auction_bid: tuple[str, float, int] | None = None
@@ -108,7 +109,7 @@ class AgentCore:
         # Derived config with jitters
         self.regime_classifier = RegimeClassifier(config=RegimeConfig(
             window_size=reg_cfg.window_size,
-            classification_interval=reg_cfg.classification_interval,
+            dwell_time=reg_cfg.dwell_time,
             neighbor_low=max(1, reg_cfg.neighbor_low + jitter_neighbor),
             variance_high=max(0.1, reg_cfg.variance_high + jitter_variance),
             energy_slope_critical=reg_cfg.energy_slope_critical,
@@ -130,6 +131,7 @@ class AgentCore:
         self.broadcast_rate: float = 1.0
         self.auction_participation: float = 1.0
         self.velocity_scale: float = 1.0
+        self.tx_power_scale: float = 1.0  # Phase 1: Dynamic Transmission Power
         self.projection_events: int = 0
         
         # Phase 4B: Stability Constrained Tuning
@@ -138,6 +140,10 @@ class AgentCore:
         self.total_parameter_shift: float = 0.0
         self.max_parameter_shift: float = 0.0
         self._theta_safe_enabled = theta_safe_enabled
+        
+        # Phase 5: Distributed Spectral Estimation Tracking
+        self._prev_variance = 0.0
+        self._lambda_2_proxy = 0.0
         
         # Stored initial states
         self._base_epsilon = 0.05
@@ -254,9 +260,11 @@ class AgentCore:
         """Deduct energy for movement. Called by event handler only."""
         self._energy.consume(distance * p_move)
 
-    def consume_comm_energy(self, num_recipients: int, p_comm: float) -> None:
-        """Deduct energy for communication. Called by event handler only."""
-        self._energy.consume(num_recipients * p_comm)
+    def consume_comm_energy(self, num_recipients: int, p_comm: float, power_multiplier: float = 1.0) -> None:
+        """Deduct energy for communication using quadratic path loss model."""
+        # Phase 1: Energy scales quadratically with transmission power
+        cost_per_msg = p_comm * (power_multiplier ** 2)
+        self._energy.consume(num_recipients * cost_per_msg)
 
     def consume_idle_energy(self, dt: float, p_idle: float) -> None:
         """Deduct idle energy. Called by event handler only."""
@@ -289,6 +297,7 @@ class AgentCore:
             energy=self._energy.energy,
             consensus_state=self.consensus_state,
             send_time=current_time,
+            tx_radius=self._comm_radius * self.tx_power_scale, # Phase 1
             auction_bid=auction_bid,
         )
 
@@ -328,7 +337,7 @@ class AgentCore:
 
     # ── Consensus (called by CONSENSUS_UPDATE handler) ──────
 
-    def handle_consensus_update(self, epsilon: float) -> None:
+    def handle_consensus_update(self, current_time: float, dt: float, epsilon: float) -> None:
         """
         Execute one iteration of the discrete-time distributed gossip protocol.
         """
@@ -341,11 +350,14 @@ class AgentCore:
         neighbors = self._local_map.get_all_neighbors()
         neighbor_states = [nb.consensus_state for nb in neighbors]
         
+        # Calculate continuous delays for each neighbor's state
+        neighbor_delays = [max(0.0, current_time - nb.timestamp) for nb in neighbors]
+        
         # Apply local tuning (completely obscuring the global event epsilon argument)
         effective_epsilon = self.gossip_epsilon
         
         self.consensus_state = compute_gossip_update(
-            self.consensus_state, neighbor_states, effective_epsilon
+            self.consensus_state, neighbor_states, neighbor_delays, dt, effective_epsilon
         )
 
     # ── Auction (called by AUCTION handlers) ────────────────
@@ -427,12 +439,20 @@ class AgentCore:
             compute_information_staleness,
             compute_local_consensus_variance,
             compute_neighbor_density,
+            compute_distributed_spectral_proxy,
         )
 
         # 1. Compute instantaneous fog-of-war metrics bounds
         density = compute_neighbor_density(self._local_map)
         staleness = compute_information_staleness(self._local_map, current_time)
         variance = compute_local_consensus_variance(self)
+        
+        # Phase 5: Compute distributed spectral proxy
+        raw_lambda_2 = compute_distributed_spectral_proxy(
+            variance, self._prev_variance, self.gossip_epsilon, dt=1.0
+        )
+        self._lambda_2_proxy = (1 - self.tuning_alpha) * self._lambda_2_proxy + self.tuning_alpha * raw_lambda_2
+        self._prev_variance = variance
         
         # 2. Package into a snapshot
         snapshot = TelemetrySnapshot(
@@ -458,22 +478,40 @@ class AgentCore:
             if not self._coverage_enabled:
                 theta_proposed["coverage_gain"] = 0.0
                 
-            self._apply_strategy_parameters(theta_proposed)
+            self._apply_strategy_parameters(theta_proposed, current_time)
             
-    def _apply_strategy_parameters(self, theta_proposed: dict[str, float]) -> None:
+    def _apply_strategy_parameters(self, theta_proposed: dict[str, float], current_time: float) -> None:
         """
         Projects proposed modifications onto the Safe Manifold, then smoothly
         interpolates current agent bounds toward the required targets.
         """
         if self._theta_safe_enabled:
-            theta_safe, clip_count = project_to_theta_safe(theta_proposed)
+            # Phase 4: Dynamic Spectral Verification Bounds
+            neighbors = self._local_map.get_all_neighbors()
+            d_i = len(neighbors)
+            if d_i > 0:
+                # dt is 1.0, so max continuous delay is roughly tau_max
+                max_delay = max([current_time - nb.timestamp for nb in neighbors])
+                tau_max = max(0, int(max_delay))
+                safe_bound = 0.99 / (d_i * (tau_max + 1))
+            else:
+                safe_bound = 1.0 # arbitrary safe bound if isolated
+                
+            dynamic_bounds = {"gossip_epsilon": safe_bound}
+            theta_nominal = self.supervisor.propose_parameters(Strategy.NORMAL_OPERATION, self._base_epsilon)
+            
+            theta_safe, clip_count = project_to_theta_safe(
+                theta_proposed, 
+                theta_nominal=theta_nominal, 
+                dynamic_bounds=dynamic_bounds
+            )
         else:
             theta_safe = theta_proposed
             clip_count = 0
         
         old_params = [
             self.coverage_gain, self.gossip_epsilon, self.broadcast_rate, 
-            self.auction_participation, self.velocity_scale
+            self.auction_participation, self.velocity_scale, self.tx_power_scale
         ]
         
         # Phase 4B: Apply exponential moving average stability smoothing
@@ -482,10 +520,11 @@ class AgentCore:
         self.broadcast_rate = smooth_update(self.broadcast_rate, theta_safe.get("broadcast_rate", self.broadcast_rate), self.tuning_alpha)
         self.auction_participation = smooth_update(self.auction_participation, theta_safe.get("auction_participation", self.auction_participation), self.tuning_alpha)
         self.velocity_scale = smooth_update(self.velocity_scale, theta_safe.get("velocity_scale", self.velocity_scale), self.tuning_alpha)
+        self.tx_power_scale = smooth_update(self.tx_power_scale, theta_safe.get("tx_power_scale", self.tx_power_scale), self.tuning_alpha)
         
         new_params = [
             self.coverage_gain, self.gossip_epsilon, self.broadcast_rate, 
-            self.auction_participation, self.velocity_scale
+            self.auction_participation, self.velocity_scale, self.tx_power_scale
         ]
         
         shift = sum(abs(n - o) for n, o in zip(new_params, old_params)) / len(new_params)

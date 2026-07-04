@@ -20,9 +20,16 @@ import numpy as np
 
 @dataclass(frozen=True)
 class RegimeConfig:
-    """Tunable thresholds for regime detection (Passive Detection Layer)."""
+    """
+    Tunable thresholds for regime detection (Passive Detection Layer).
+    
+    Includes theoretical guarantees for Hybrid Automata:
+    - dwell_time: Enforces a strict minimum time (tau_d) between regime switches.
+      Based on Switched Systems theory (e.g., Liberzon), this prevents Zeno behavior 
+      and guarantees that transient instability decays before the next switch.
+    """
     window_size: int = 10
-    classification_interval: float = 5.0
+    dwell_time: float = 5.0
     neighbor_low: int = 5
     variance_high: float = 1.5
     energy_slope_critical: float = -0.8
@@ -75,16 +82,23 @@ class SimConfig:
     num_agents: int = 50
     grid_width: float = 100.0
     grid_height: float = 100.0
-    comm_radius: float = 20.0
+    
+    # Phase 1: Dynamic Transmission Power
+    comm_radius_base: float = 20.0
+    comm_radius_max: float = 40.0
+    comm_radius: float = 20.0 # Keeping for backward compatibility temporarily
+    
+    # Phase 1: Temporal Anchor (1 tick = 0.1 physical seconds, 10Hz control loop)
+    dt: float = 1.0
+    
     p_drop: float = 0.1
     psi_max: float = 0.3
     latency_mean: float = 0.5
     latency_min: float = 0.05
     energy_initial: float = 100.0
     p_move: float = 0.1
-    p_comm: float = 0.05
+    p_comm: float = 0.05 # Baseline quadratic energy coefficient
     p_idle: float = 0.001
-    dt: float = 1.0
     v_max: float = 2.0
     r_collision: float = 0.5
     max_time: float = 200.0

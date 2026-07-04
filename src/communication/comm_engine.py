@@ -66,6 +66,7 @@ class CommunicationEngine:
         sender_consensus: float,
         sender_auction_bid: tuple[str, float, int] | None,
         send_time: float,
+        sender_tx_radius: float,  # Phase 1: Dynamic Transmission Power
         all_positions: np.ndarray,
         alive_mask: np.ndarray,
         kernel: SimulationKernel,
@@ -98,21 +99,25 @@ class CommunicationEngine:
         int
             Number of delivery events scheduled.
         """
-        # Build ephemeral neighbor list (not persisted)
-        neighbor_lists = self._rgg.build_neighbor_lists(all_positions)
-        neighbors = neighbor_lists.get(sender_id, [])
-
-        delivered = 0
+        # Evaluate neighbors dynamically using sender's unique tx_radius
         psi_val = self._psi.evaluate(sender_position, send_time)
+        delivered = 0
+        
+        # Calculate distances to all other agents
+        distances = np.linalg.norm(all_positions - sender_position, axis=1)
 
-        for nbr_id in neighbors:
-            if not alive_mask[nbr_id]:
+        for nbr_id in range(len(all_positions)):
+            if nbr_id == sender_id or not alive_mask[nbr_id]:
+                continue
+                
+            dist = float(distances[nbr_id])
+            if dist > sender_tx_radius:
                 continue
 
             self.total_sent += 1
 
-            # Evaluate packet drop
-            if self._drop.should_drop(psi_val):
+            # Evaluate non-linear packet drop based on SNR / distance
+            if self._drop.should_drop(psi_val, dist, sender_tx_radius):
                 self.total_dropped += 1
                 continue  # Silent discard — sender is unaware
 
@@ -127,6 +132,7 @@ class CommunicationEngine:
                 energy=sender_energy,
                 consensus_state=sender_consensus,
                 send_time=send_time,
+                tx_radius=sender_tx_radius,
                 auction_bid=sender_auction_bid,
             )
 

@@ -1,0 +1,100 @@
+\n--- 2412.02146v2.pdf ---\nIEEE TRANSACTIONS ON AUTOMATIC CONTROL
+1
+Distributed Task Allocation for Multi-Agent Systems:
+A Submodular Optimization Approach
+Jing Liu, Fangfei Li, Member, IEEE, Xin Jin, Yang Tang, Fellow, IEEE
+Abstract— This paper addresses dynamic task allocation
+in resource-constrained multi-agent systems (MASs) with
+sequentially updated assignments. We develop a submodu-
+lar maximization framework integrated with q-independence
+systems, demonstrating greater flexibility than conventional
+matroid-based constraints for modeling heterogeneous re-
+source limitations. The proposed distributed greedy bundles
+algorithm (DGBA) addresses communication limitations in
+MASs while providing rigorous approximation guarantees for
+submodular maximization under a q-independence system
+constraint, ensuring low computational complexity. DGBA
+achieves feasible task allocation in polynomial time with re-
+duced space complexity compared to existing methods. Exten-
+sive Monte Carlo simulations in a micro-satellite observation
+scenario demonstrate that DGBA consistently outperforms
+benchmark algorithms in total utility, resource eﬀiciency, and
+assignment stability, while maintaining real-time computa-
+tional feasibility.
+Index Terms— Multi-agent systems, task allocation, sub-
+modular optimization, distributed algorithms.
+I. INTRODUCTION
+M
+ULTI-AGENT task allocation (MATA) plays a vi-
+tal role in real-world applications such as persistent
+surveillance [1], area exploration [2], and job automation [3].
+The pro\n--- 36422-75414-1-PB.pdf ---\nInternational Journal of Electrical and Computer Engineering (IJECE) 
+Vol. 14, No. 6, December 2024, pp. 6433~6444 
+ISSN: 2088-8708, DOI: 10.11591/ijece.v14i6.pp6433-6444 
+     6433 
+ 
+ 
+Journal homepage: http://ijece.iaescore.com 
+Exploring optimal resource allocation methods for improved 
+efficiency in flying ad-hoc network environments: a survey 
+ 
+ 
+Zeinab E. Ahmed1,2, Aisha A. Hashim2,3, Rashid A. Saeed4, Mamoon Mohammed Ali Saeed5 
+1Department of Computer Engineering, University of Gezira, Wad-Madani, Sudan 
+2Department of Electrical and Computer Engineering, International Islamic University Malaysia, Selangor, Malaysia 
+3Department of Electrical and Electronic Engineering Science, University of Johannesburg, Johannesburg, South Africa 
+4Department of Computer Engineering, College of Computers, and Information Technology, Taif University, Taif, Saudi Arabia 
+5Department of Communications and Electronics Engineering, Faculty of Engineering, University of Modern Sciences, Sana'a, Yemen 
+ 
+ 
+Article Info 
+ 
+ABSTRACT 
+Article history: 
+Received May 23, 2024 
+Revised Aug 6, 2024 
+Accepted Aug 14, 2024 
+ 
+ 
+This survey explores optimal resource allocation methods to enhance the 
+efficiency of flying ad-hoc networks (FANETs). Unmanned aerial vehicles 
+(UAVs), commonly known as drones, are widely deployed in military and 
+civilian applications, necessitating effective coordination and communication 
+to overcome challenges. FANETs facilitate wireless communication among 
+UAVs, \n--- preprints202603.2299.v1.pdf ---\nReview
+Not peer-reviewed version
+A Systematic Mapping of UAV Swarming
+Strategies: From Fundamentals to
+Coordination Mechanisms and
+Algorithmic Paradigms
+Diogo Ceia , Alexandre Athayde , Alexandra Moutinho *
+Posted Date: 30 March 2026
+doi: 10.20944/preprints202603.2299.v1
+Keywords: Uncrewed Aerial Vehicles (UAV); UAV swarm; Multi-UAV; coordination mechanisms; swarming
+approaches; swarming behaviours; multi-agent systems; swarm intelligence
+Preprints.org is a free multidisciplinary platform providing preprint service
+that is dedicated to making early versions of research outputs permanently
+available and citable. Preprints posted at Preprints.org appear in Web of
+Science, Crossref, Google Scholar, Scilit, Europe PMC.
+Copyright: This open access article is published under a Creative Commons CC BY 4.0
+license, which permit the free download, distribution, and reuse, provided that the author
+and preprint are cited in any reuse.
+\n--- s40747-024-01644-4.pdf ---\nComplex & Intelligent Systems (2025) 11:8
+https://doi.org/10.1007/s40747-024-01644-4
+ORIGINAL ARTICLE
+Construction of kill webs with heterogeneous UAV swarms in dynamic
+contested environments
+Wenlin Liu1 · Zishuang Pan1 · Wei Han1 · Xichao Su1 · Dazhao Yu1 · Bing Wan1
+Received: 12 March 2024 / Accepted: 19 August 2024 / Published online: 9 November 2024
+© The Author(s) 2024
+Abstract
+With the concept of "mosaic warfare," a novel combat style that involves constructing "kill webs" with unmanned aerial vehicle
+(UAV) swarms has emerged. However, little research has focused on this speciﬁc task scenario, particularly concerning the
+self-organization and adaptive collaboration of heterogeneous combat units in dynamic contested environments. Considering
+the scales and highly dynamic natures of such swarms, an adaptive communication network mechanism is developed based
+on the Molloy-Reed criterion. In contrast with common ofﬂine/noncombat task scenarios, the self-organization process is
+reﬁned through agent-based modeling, and a combat effectiveness evaluation is introduced to provide enhanced task execution
+incentives. The proposed dynamic consensus-based coalition algorithm (DCBCA) addresses UAV intelligence defects such
+as "confusion," "forgetfulness," and "recklessness" during the dynamic target selection process, enabling effective bottom-up
+kill webs construction. Extensive simulation results demonstrate that the algorithmic system outlined in this paper can support
+the efﬁcien
