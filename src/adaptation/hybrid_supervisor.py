@@ -70,6 +70,7 @@ class HybridSupervisor:
             "broadcast_rate": 1.0,
             "auction_participation": 1.0,
             "velocity_scale": 1.0,
+            "tx_power_scale": 1.0, # Phase 1: Dynamic Transmission Power
         }
         
         if strategy == Strategy.NORMAL_OPERATION:
@@ -83,12 +84,14 @@ class HybridSupervisor:
             theta["coverage_gain"] = 0.0  # Intent: Stop scattering. Will be clipped to 0.5 by projector.
             theta["gossip_epsilon"] = base_epsilon * 2.0
             theta["auction_participation"] = 0.0
+            theta["tx_power_scale"] = 2.0 # Boost transmission power to bridge gaps
             
         elif strategy == Strategy.ENERGY_CONSERVATION:
             theta["broadcast_rate"] = 0.5
             theta["auction_participation"] = 0.0
             theta["velocity_scale"] = 0.0 # Intent: Freeze. Clamped to 0.5
             theta["coverage_gain"] = 0.0
+            theta["tx_power_scale"] = 1.0 # Drop to baseline
             
         elif strategy == Strategy.LATENCY_STABILIZATION:
             theta["broadcast_rate"] = 0.5

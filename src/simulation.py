@@ -179,8 +179,8 @@ class Phase1Simulation:
                 agent_id=agent.agent_id,
             ))
             
-            # Phase 2D: Staggered initial regime events
-            regime_delta = self.config.regime.classification_interval / float(self.config.num_agents)
+            # Stagger initial regime checks to prevent CPU spikes
+            regime_delta = self.config.regime.dwell_time / float(self.config.num_agents)
             regime_start_time = dt + (agent.agent_id * regime_delta)
             
             self.kernel.schedule_event(Event(
@@ -302,21 +302,23 @@ class Phase1Simulation:
             sender_consensus=out_msg.consensus_state,
             sender_auction_bid=out_msg.auction_bid,
             send_time=out_msg.send_time,
+            sender_tx_radius=out_msg.tx_radius, # Phase 1
             all_positions=all_positions,
             alive_mask=self.alive_mask,
             kernel=self.kernel,
         )
 
         # Energy consumed for communication (event-driven only)
-        # Cost is per-neighbor-attempted, not per-delivered
+        # Cost is per-neighbor-attempted, scaled quadratically by transmission radius
         neighbors_count = sum(
             1 for aid in range(self.config.num_agents)
             if aid != event.agent_id and self.alive_mask[aid]
-            and np.linalg.norm(
+            and float(np.linalg.norm(
                 all_positions[aid] - all_positions[event.agent_id]
-            ) <= self.config.comm_radius
+            )) <= out_msg.tx_radius
         )
-        agent.consume_comm_energy(max(neighbors_count, 0), self.config.p_comm)
+        power_multiplier = out_msg.tx_radius / self.config.comm_radius_base
+        agent.consume_comm_energy(max(neighbors_count, 0), self.config.p_comm, power_multiplier)
 
         if not agent.is_alive:
             self.alive_mask[event.agent_id] = False
@@ -351,6 +353,7 @@ class Phase1Simulation:
             energy=msg.energy,
             consensus_state=msg.consensus_state,
             send_time=msg.send_time,
+            tx_radius=msg.tx_radius,
             auction_bid=msg.auction_bid,
         ))
         agent.process_inbox()
@@ -380,7 +383,11 @@ class Phase1Simulation:
         if not agent.is_alive:
             return
 
-        agent.handle_consensus_update(epsilon=self.config.consensus_epsilon)
+        agent.handle_consensus_update(
+            current_time=event.timestamp,
+            dt=self.config.dt,
+            epsilon=self.config.consensus_epsilon
+        )
 
         if not agent.is_alive:
             self.alive_mask[event.agent_id] = False
@@ -435,7 +442,7 @@ class Phase1Simulation:
 
         # Schedule the next regime update
         self.kernel.schedule_event(Event(
-            timestamp=event.timestamp + self.config.regime.classification_interval,
+            timestamp=event.timestamp + self.config.regime.dwell_time,
             event_type=EventType.REGIME_UPDATE,
             agent_id=event.agent_id,
         ))

@@ -56,3 +56,40 @@ def compute_local_consensus_variance(agent: AgentCore) -> float:
         return 0.0
         
     return statistics.variance(states)
+
+def compute_distributed_spectral_proxy(
+    current_variance: float, 
+    prev_variance: float, 
+    epsilon: float, 
+    dt: float
+) -> float:
+    """
+    Phase 5: Distributed Estimator for Algebraic Connectivity (lambda_2).
+    
+    Rather than relying on global centralized calculations, the agent estimates 
+    the Fiedler value locally using the convergence rate of the discrete-time 
+    gossip consensus protocol.
+    
+    According to established literature, the state error decays proportionally 
+    to (1 - epsilon * lambda_2). By calculating the variance decay ratio:
+        r(t) = variance(t) / variance(t-1)
+    The agent extracts the local spectral proxy:
+        lambda_2_proxy = (1 - r(t)) / (epsilon * dt)
+        
+    This provides the mathematical difference equations required to justify
+    regime detection without violating the Fog-of-War constraint.
+    """
+    if prev_variance <= 1e-6 or current_variance <= 1e-6:
+        # If consensus is already reached (or perfectly isolated), return a high/max proxy
+        return 1.0
+        
+    # Calculate decay ratio (bounded to prevent negative lambda estimates from noise)
+    decay_ratio = current_variance / prev_variance
+    decay_ratio = min(decay_ratio, 1.0)
+    
+    if epsilon <= 0.0:
+        return 0.0
+        
+    # Extract estimated Fiedler value proxy
+    lambda_2_est = (1.0 - decay_ratio) / (epsilon * dt)
+    return float(lambda_2_est)
