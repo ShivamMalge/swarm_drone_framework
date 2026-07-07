@@ -72,6 +72,7 @@ class Phase1Simulation:
                 comm_radius=config.comm_radius,
                 regime_config=config.regime,
                 theta_safe_enabled=config.theta_safe_enabled,
+                test_mode=config.test_mode,
             )
             
             # Experiment 2: Thermodynamics - Randomized low initial energy
@@ -112,6 +113,7 @@ class Phase1Simulation:
         # Phase 3D/4: Global metric logs
         self.connectivity_log: list[dict] = []
         self.adaptation_log: list[dict] = []
+        self.time_of_death: float | None = None
         
 
         # ── Register handlers ───────────────────────────────
@@ -245,6 +247,8 @@ class Phase1Simulation:
         # Check for death
         if not agent.is_alive:
             self.alive_mask[event.agent_id] = False
+            if self.time_of_death is None and not np.any(self.alive_mask):
+                self.time_of_death = event.timestamp
             return
 
         # Patch 2: Physical Spatial Resolution of Tasks
@@ -322,6 +326,8 @@ class Phase1Simulation:
 
         if not agent.is_alive:
             self.alive_mask[event.agent_id] = False
+            if self.time_of_death is None and not np.any(self.alive_mask):
+                self.time_of_death = event.timestamp
             return
 
         # Update drop tracker
@@ -368,6 +374,8 @@ class Phase1Simulation:
 
         if not agent.is_alive:
             self.alive_mask[event.agent_id] = False
+            if self.time_of_death is None and not np.any(self.alive_mask):
+                self.time_of_death = event.timestamp
             return
 
         # Schedule next idle drain
@@ -391,6 +399,8 @@ class Phase1Simulation:
 
         if not agent.is_alive:
             self.alive_mask[event.agent_id] = False
+            if self.time_of_death is None and not np.any(self.alive_mask):
+                self.time_of_death = event.timestamp
             return
 
         # Schedule the next consensus update
@@ -438,6 +448,8 @@ class Phase1Simulation:
 
         if not agent.is_alive:
             self.alive_mask[event.agent_id] = False
+            if self.time_of_death is None and not np.any(self.alive_mask):
+                self.time_of_death = event.timestamp
             return
 
         # Schedule the next regime update
@@ -593,6 +605,7 @@ class Phase1Simulation:
             "comm_delivered": self.comm_engine.total_delivered,
             "drop_rate": self.drop_tracker.drop_rate,
             "simulation_time": self.kernel.now,
+            "time_of_death": self.time_of_death,
             "regimes_distribution": self._get_regime_distribution(),
         }
 
