@@ -78,6 +78,7 @@ class AgentCore:
         regime_config: RegimeConfig | None = None,
         tuning_alpha: float = 0.15,
         theta_safe_enabled: bool = True,
+        test_mode: str | None = None,
     ) -> None:
         self.agent_id = agent_id
         self._position: np.ndarray = position.copy()
@@ -140,6 +141,7 @@ class AgentCore:
         self.total_parameter_shift: float = 0.0
         self.max_parameter_shift: float = 0.0
         self._theta_safe_enabled = theta_safe_enabled
+        self.test_mode = test_mode
         
         # Phase 5: Distributed Spectral Estimation Tracking
         self._prev_variance = 0.0
@@ -497,7 +499,7 @@ class AgentCore:
             else:
                 safe_bound = 1.0 # arbitrary safe bound if isolated
                 
-            dynamic_bounds = {"gossip_epsilon": safe_bound}
+            dynamic_bounds = {"gossip_epsilon": safe_bound} if self.test_mode != "static_bounded" else {}
             theta_nominal = self.supervisor.propose_parameters(Strategy.NORMAL_OPERATION, self._base_epsilon)
             
             theta_safe, clip_count = project_to_theta_safe(

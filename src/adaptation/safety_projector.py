@@ -23,7 +23,7 @@ THETA_SAFE_BOUNDS = {
     "gossip_epsilon": (0.01, 0.05),
     "broadcast_rate": (0.2, 1.5),
     "auction_participation": (0.0, 1.0),
-    "velocity_scale": (0.5, 1.5),
+    "velocity_scale": (0.0, 1.5),
     "tx_power_scale": (1.0, 2.0),
 }
 
