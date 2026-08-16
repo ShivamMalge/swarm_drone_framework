@@ -443,9 +443,38 @@ Oracle [per_neighbour]     0.049+/-0.002  (0.985)   0.0703+/-0.0065     1454+/-1
 λ₂ collapsed by 7-20× across every arm once corpses were excluded. Two consequences, both to be stated:
 
 1. **λ₂ no longer distinguishes Proposed from Unconstrained: 0.010 ± 0.002 vs 0.009 ± 0.002.** The confidence intervals overlap almost completely. Any claim that the framework maintains superior connectivity relative to the unconstrained baseline is **unsupported** and must be removed — including the abstract's "demonstrates sustained network connectivity" (`[MS-03]`) and §V-B's framing.
-2. **λ₂ does still discriminate the oracle: 0.049 ± 0.002, ~5× the decentralized arms.** So the column is not worthless — it is worth keeping *for the oracle comparison*, where it independently corroborates the t50 result (the oracle really does hold the network together better). Keep the column in the oracle sensitivity table; drop the Proposed-vs-Unconstrained connectivity claim.
+2. ~~λ₂ does still discriminate the oracle: 0.049 ± 0.002, ~5× the decentralized arms. Keep the column for the oracle comparison.~~ **RETRACTED — that claim was itself confounded. See below.**
 
 Note the pre-1.1 numbers would have supported the opposite reading for the oracle (0.497 for `all_to_all`, which is in fact the *worst*-connected arm once corpses are removed — its swarm is dead by t=43, so nearly all of its logged λ₂ was corpse geometry).
+
+#### Confound check: the surviving separation was survivorship, not connectivity
+
+Having concluded λ₂ "still discriminates the oracle", I checked whether that separation was real before relying on it. It was not. After 1.1 an extinct swarm logs λ₂ = 0.0, so the **run-mean averages connectivity-while-alive together with a long tail of post-extinction zeros** — an arm that merely lives longer scores higher without maintaining connectivity any better. Added `n_alive` to `connectivity_log` and re-measured under three conditionings:
+
+```
+lambda_2 confound check -- 10 seeds
+
+arm                           run-mean l2     l2 | n_alive>1      l2 | t<=100  %ticks alive  mean N alive
+----------------------------------------------------------------------------------------------------------
+Unconstrained              0.0092+/-0.0018    0.0590+/-0.0095   0.1836+/-0.0343         15.8%          38.2
+Proposed                   0.0098+/-0.0016    0.0101+/-0.0018   0.1949+/-0.0321         97.6%           9.0
+Oracle [all_to_all]        0.0040+/-0.0003    0.3225+/-0.0246   0.0806+/-0.0061          1.2%          82.5
+Oracle [per_neighbour]     0.0493+/-0.0016    0.0719+/-0.0065   0.5316+/-0.0331         70.1%          24.7
+```
+
+The run-mean is dominated by how long each arm survives, not by connectivity:
+- `Oracle [all_to_all]` run-mean **0.0040** vs alive-conditioned **0.3225** — an **80× swing**, because it is alive for only 1.2 % of logged ticks. On the run-mean it looks like the worst-connected arm; conditioned on being alive it is the best.
+- `Unconstrained` swings 6.4× (0.0092 → 0.0590) for the same reason.
+- `Proposed` barely moves (0.0098 → 0.0101) because it is alive for 97.6 % of ticks — which is exactly why it *appeared* comparable on the run-mean.
+
+**λ₂ is not comparable across arms at any conditioning**, because every conditioning is confounded by a different variable:
+- *Run-mean* → confounded by survival time.
+- *Conditioned on `n_alive > 1`* → confounded by swarm size. Proposed averages 9.0 living agents against Unconstrained's 38.2; a sparser graph has lower λ₂ regardless of coordination quality. On this measure Proposed (0.0101) looks 5.8× **worse** than Unconstrained (0.0590), which is an artifact of population, not a finding.
+- *Early window (t ≤ 100)* → the only fair Proposed-vs-Unconstrained comparison, since their attrition is identical (t50 = 102 for both). It shows **0.1949 ± 0.0321 vs 0.1836 ± 0.0343 — overlapping, no separation.** For the oracle arms even this window has divergent populations, so it does not license a clean claim either.
+
+**`[MS-02]` FINAL: drop the λ₂ column from Table III entirely.** Per the standing directive, no column is kept alive on differences smaller than their confidence intervals, and no substitute connectivity metric will be sought to restore a separation. §V-B should state that under corrected measurement λ₂ does not distinguish the proposed framework from the unconstrained baseline, and that cross-arm λ₂ comparison is confounded by differential survival and swarm size, so it is not reported as a discriminating metric.
+
+**`[MS-03]` FINAL — flagged now rather than deferred to the Phase 2 sweep, as directed.** The abstract's *"Stress testing with 100 agents over 15 million discrete events demonstrates **sustained network connectivity**"* **cannot survive**. There is no measurement supporting it: λ₂ does not separate Proposed from Unconstrained in the only fair window (0.195 vs 0.184, overlapping CIs), and the proposed framework's own alive-conditioned λ₂ is 0.0101 with a mean of 9 surviving agents. The clause must be deleted from the abstract, not softened. §V-B's "the system successfully stabilizes the network without centralized topology matrices" falls with it.
 **`[MS-03]`** Abstract: "demonstrates sustained network connectivity" — re-verify against the corrected λ₂ and delete if unsupported.
 
 ### 1.2 — Separate the two ablation arms, or delete one `[F-02]`
@@ -456,12 +485,9 @@ Note the pre-1.1 numbers would have supported the opposite reading for the oracl
 
 **Option B:** make `static_bounded` actually differ by pinning `gossip_epsilon` to a fixed constant rather than merely skipping the dynamic bound. Only worth it if the paper needs a static-ε ablation.
 
-**Verify (for A):** run `run_monte_carlo_table.py` and confirm the `True Oracle` row differs from `Proposed` on at least one metric:
-```python
-assert not np.array_equal(oracle_positions, proposed_positions)
-```
-**Verify (for B):** re-run the Probe-5 script in the scratchpad; `positions identical` must become `False` for all three seeds.
-**Evidence:** _(paste output)_
+**Verify (for A):** run `run_monte_carlo_table.py` and confirm the `True Oracle` row differs from `Proposed` on at least one metric.
+
+**Evidence:** ✅ DONE — **Option A taken.** The `static_bounded` arm is removed from `run_monte_carlo_table.py`; the three remaining arms are Unconstrained / Proposed / True Oracle (billed `all_to_all` per the 0.6.2 decision). Full 50-seed output under 1.3 below. The oracle differs from Proposed on every metric (t50 21 vs 101, decay 2.801 vs 0.050, survival 39 vs >2000), so the arms are genuinely distinct — unlike the arm that was removed.
 
 **`[MS-04]`** Table III row 2 is currently labelled "Centralized Oracle (Static Bound)". Under Option A, replace it with the real `True Oracle` results. Under Option B, rename it to "Static-ε Baseline" and **delete** the sentence "a Centralized Oracle (a theoretically perfect, global-information system serving as an upper bound)".
 **`[MS-05]`** Delete "The oracle exhibits a significantly tighter confidence interval ($\pm 40$ ticks)". The table on the same page prints ±2. Whichever survives, they must agree.
@@ -479,7 +505,54 @@ Change the reported statistic from a censored mean to:
 Additionally promote `time_to_50pct_attrition` to a **primary** reported metric — it is uncensored and, per F-09, it is the metric that actually discriminates (and shows the two arms are equivalent: 105 vs 106).
 
 **Verify:** the MC output must print, for each arm, `Censored Runs (Hit 2000s max_time cap): N/50` with `N > 0` for the Proposed arm, and must not print a bare mean alongside it without the qualifier.
-**Evidence:** _(paste the full MC output block)_
+
+**Evidence:** ✅ DONE — reporting rewritten: t50 promoted to PRIMARY, censored survival refuses to print a point estimate when >50 % of runs are censored, λ₂ and `coverage_completion_rate` demoted to explicitly-labelled diagnostics.
+
+```
+--- Final Results (50 Runs) ---
+PRIMARY METRIC: Time to 50% Attrition. It is uncensored and is the
+only survival measure that discriminates between arms.
+
+[Unconstrained]
+  Time to 50% Attrition (PRIMARY): 100 +/- 2
+  Energy Decay Rate: 0.2277 +/- 0.0178
+  Swarm Survival (Total Death): 476 +/- 38  (0/50 censored)
+  [diagnostic, NOT a reportable result] run-mean lambda_2: 0.0095 +/- 0.0008
+  [diagnostic, known-broken metric] coverage_completion_rate: 92.09%
+
+[Proposed]
+  Time to 50% Attrition (PRIMARY): 101 +/- 2
+  Energy Decay Rate: 0.0501 +/- 0.0005
+  Swarm Survival: RIGHT-CENSORED in 49/50 runs (swarm never fully died).
+    -> lower bound only; median >= 2000, mean of censored data 1992 is NOT a measurement.
+    -> 49/50 censored: report as '> 2000 ticks', do NOT quote a point estimate.
+  [diagnostic, NOT a reportable result] run-mean lambda_2: 0.0098 +/- 0.0008
+  [diagnostic, known-broken metric] coverage_completion_rate: 100.00%
+
+[True Oracle]
+  Time to 50% Attrition (PRIMARY): 21 +/- 0
+  Energy Decay Rate: 2.8010 +/- 0.2067
+  Swarm Survival (Total Death): 39 +/- 4  (0/50 censored)
+  [diagnostic, NOT a reportable result] run-mean lambda_2: 0.0042 +/- 0.0002
+  [diagnostic, known-broken metric] coverage_completion_rate: 100.00%
+
+real	4m1.016s
+```
+
+**The 50-seed result confirms the 10-seed finding: the framework does not delay half-swarm loss.** t50 is **101 ± 2 (Proposed) vs 100 ± 2 (Unconstrained)** — a difference an order of magnitude inside the confidence intervals. Written into §V-A as an explicit refutation, not omitted.
+
+**The framework's genuine, well-supported result is thermodynamic:** energy decay **0.0501 ± 0.0005 vs 0.2277 ± 0.0178**, a 4.5× reduction with cleanly separated intervals.
+
+**Table III regenerated and the `PENDING REGENERATION` block removed:**
+```
+=== these must all be 0 ===
+PENDING REGENERATION       0
+1999                       0
+perfectly matches          0
+Spectral Connectivity      0
+theoretically perfect      0
+```
+Columns are now Time to 50% Attrition (primary) / Energy Decay Rate / Total Swarm Survival, with censoring stated in-cell (`> 2000` (49/50 censored)) and the λ₂ column dropped per `[MS-02]`. `[MS-04]`, `[MS-05]`, `[MS-06]`, `[MS-07]`, `[MS-08]`, `[MS-09]` are discharged by this edit; `[MS-03]` (abstract) remains open.
 
 **`[MS-07]`** Table III's "Mean Swarm Survival (ticks)" column: add a censoring footnote, or replace with median + censored count. `1999 ± 2` currently means "3 of 100 drones idled until the clock stopped".
 **`[MS-08]`** Add a `Time to 50 % Attrition` column to Table III. Report that it is ~105 ticks for **both** arms, i.e. the framework does not delay the loss of half the swarm. This contradicts the current narrative; state it anyway.

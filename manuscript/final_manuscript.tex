@@ -292,23 +292,16 @@ To provide a rigorous testbed, experiments were executed using spatial environme
 
 To ensure statistical significance and validate the robustness of the architecture, all quantitative experiments were averaged over 50 independent Monte Carlo runs utilizing randomized initial PRNG seeds. We report the mean metrics alongside 95\% confidence intervals. Table \ref{tab:baselines} provides a quantitative ablation against an Unconstrained RGG baseline (which lacks our safety bounding) and a Centralized Oracle that receives exact global state every tick. We deliberately do not treat the oracle as a performance upper bound. Because this work studies coordination under \emph{joint} communication and energy constraints, global awareness must be paid for: the oracle is billed for transmission to every surviving agent, whereas decentralized agents pay only for neighbours inside $R_{tx}$. Under that accounting the oracle is charged for approximately $99$ recipients per broadcast against roughly $9$ for the decentralized arms, a $10.4\times$ per-transmission penalty, and it does not outlive the proposed framework. We report this as a result rather than an artifact, and quantify the accounting's contribution separately in Table \ref{tab:oracle_sensitivity}.
 
-% ============================== PENDING REGENERATION ==============================
-% WARNING: every number in this table is stale. The rows were produced before the
-% metric corrections and the oracle row still carries figures measured from the
-% "static_bounded" arm, which is NOT the oracle (it is bit-identical to the
-% Proposed arm). Regenerate from run_monte_carlo_table.py after Phase 1.1/1.2/1.3
-% and paste the runner output into fixes_phases.md before this table is trusted.
-% =================================================================================
 \begin{table}[htbp]
-\caption{Quantitative Baseline Comparison (50 Monte Carlo Runs, 95\% CI)}
+\caption{Quantitative Baseline Comparison (50 Monte Carlo Runs, 95\% CI). Time to 50\% attrition is the primary measure: it is uncensored, whereas total swarm survival is right-censored at the $2000$-tick simulation horizon.}
 \begin{center}
 \begin{tabularx}{\linewidth}{@{}l*{3}{>{\centering\arraybackslash}X}@{}}
 \toprule
-\textbf{Methodology} & \textbf{Spectral Connectivity ($\lambda_2$)} & \textbf{Energy Decay Rate (units/tick)} & \textbf{Mean Swarm Survival (ticks)} \\
+\textbf{Methodology} & \textbf{Time to 50\% Attrition (ticks)} & \textbf{Energy Decay Rate (units/tick)} & \textbf{Total Swarm Survival (ticks)} \\
 \midrule
-Unconstrained RGG & $0.25 \pm 0.02$ & $0.20 \pm 0.01$ & $527 \pm 30$ \\
-Centralized Oracle (global info, all-to-all comm. cost) & $0.29 \pm 0.01$ & $0.05 \pm 0.00$ & $1999 \pm 2$ \\
-\textbf{Proposed Framework} & \textbf{0.29 $\pm$ 0.01} & \textbf{0.05 $\pm$ 0.00} & \textbf{1999 $\pm$ 2} \\
+Unconstrained RGG & $100 \pm 2$ & $0.228 \pm 0.018$ & $476 \pm 38$ \\
+Centralized Oracle (global info, all-to-all comm. cost) & $21 \pm 0$ & $2.801 \pm 0.207$ & $39 \pm 4$ \\
+\textbf{Proposed Framework} & $\mathbf{101 \pm 2}$ & $\mathbf{0.050 \pm 0.001}$ & $> 2000$ (49/50 censored) \\
 \bottomrule
 \end{tabularx}
 \label{tab:baselines}
@@ -334,7 +327,13 @@ Oracle, per-neighbour cost & $0.070 \pm 0.007$ & $1454 \pm 137$ & 0/10 & $199 \p
 
 Table \ref{tab:oracle_sensitivity} separates the oracle's coordination quality from its communication cost. Billed all-to-all, the oracle is the shortest-lived arm in the study: perfect global awareness is bought at a bandwidth price this energy model cannot sustain, and centralization does not pay for itself. Billed per-neighbour --- that is, granted global information for free and charged exactly as the decentralized arms are --- the oracle roughly doubles the time to 50\% attrition ($199$ versus $102$ ticks) and is the only arm that meaningfully improves that metric. It nonetheless records lower total-swarm survival than the Proposed framework ($1454$ versus a censored $2000$), because total-swarm survival is determined by a small number of stationary stragglers rather than by coordination quality; we therefore treat time to 50\% attrition as the discriminating measure and report total survival only with its censoring made explicit. The decomposition is the substantive point: centralized coordination is worth roughly a doubling of swarm half-life, and under this energy model that benefit is entirely consumed by the cost of the communication required to obtain it.
 
-As demonstrated in Table \ref{tab:baselines}, the Proposed Framework perfectly matches the Centralized Oracle's maximum swarm survival ($1999$ ticks) and baseline energy decay rate ($0.05$ units/tick), vastly outperforming the Unconstrained RGG which crashes at $527$ ticks due to an exponential decay rate of $0.20$. The Proposed Framework does not achieve this by possessing global information. Tracing the executed control path shows that the difference arises from which velocity law each condition ends up running once the network fragments, and we report that mechanism directly rather than attributing the result to a stability property it does not exhibit.
+Table \ref{tab:baselines} supports one substantive claim for the proposed framework and refutes another that an earlier revision of this work asserted.
+
+The supported claim is thermodynamic. The proposed framework reduces the mean energy decay rate to $0.050 \pm 0.001$ units/tick against $0.228 \pm 0.018$ for the unconstrained baseline, a $4.5\times$ reduction with well separated confidence intervals, and it is the only arm whose swarm had not fully expired at the $2000$-tick horizon.
+
+The refuted claim concerns attrition. The framework does \emph{not} delay the loss of half the swarm: time to 50\% attrition is $101 \pm 2$ ticks against the unconstrained baseline's $100 \pm 2$, a difference well inside the confidence intervals. Whatever the safety projector contributes, it does not manifest before half the agents are already lost; the benefit is confined to the surviving remnant, which persists far longer at a much lower drain. We report total swarm survival as a censored lower bound rather than a point estimate for the same reason: $49$ of $50$ proposed-framework runs reached the horizon without total swarm death, so a mean over those runs measures the simulation cap and the behaviour of a small number of near-stationary survivors, not swarm lifetime.
+
+The Proposed Framework does not achieve this by possessing global information. Tracing the executed control path shows that the difference arises from which velocity law each condition ends up running once the network fragments, and we report that mechanism directly rather than attributing the result to a stability property it does not exhibit.
 
 Under fragmentation the Hybrid Supervisor proposes $\theta_{coverage} = 0$, an instruction to stop dispersing. With $\Theta_{safe}$ active, the static box constraint raises this proposal to the lower bound of its admissible interval, $\theta_{coverage} = 0.5$, so the agent remains in the localized Voronoi coverage law of Algorithm 3. For an agent whose belief buffer holds no live neighbours, the local Voronoi cell is the full communication disc and its centroid coincides with the agent's own position; the commanded velocity $v_i = k(c_{local} - p_i)$ is therefore identically zero. The agent halts, and its drain falls to the fixed idle and communication baseline. We note that the agent's velocity scale itself is never clamped: the halt is a fixed point of the coverage law under isolation, not an explicit velocity constraint.
 
