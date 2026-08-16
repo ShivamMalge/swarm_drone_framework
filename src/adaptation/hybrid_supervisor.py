@@ -89,7 +89,14 @@ class HybridSupervisor:
         elif strategy == Strategy.ENERGY_CONSERVATION:
             theta["broadcast_rate"] = 0.5
             theta["auction_participation"] = 0.0
-            theta["velocity_scale"] = 0.0 # Intent: Freeze. Clamped to 0.5
+            # Freeze. NOT clamped by the projector: THETA_SAFE_BOUNDS lower bound
+            # for velocity_scale is 0.0, so this passes through unmodified.
+            # (A previous comment here claimed "Clamped to 0.5", which was false;
+            # see tests/test_safety_projector.py::test_velocity_scale_zero_is_NOT_clamped.)
+            theta["velocity_scale"] = 0.0
+            # Stop dispersing. This one IS raised to 0.5 by the box clamp, which
+            # keeps the agent in the coverage law rather than the random-walk
+            # fallback -- the mechanism behind the reported energy result (F-04).
             theta["coverage_gain"] = 0.0
             theta["tx_power_scale"] = 1.0 # Drop to baseline
             

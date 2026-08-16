@@ -70,7 +70,8 @@ class CommunicationEngine:
         all_positions: np.ndarray,
         alive_mask: np.ndarray,
         kernel: SimulationKernel,
-    ) -> int:
+        position_tree=None,
+    ) -> tuple[int, int]:
         """
         Evaluate connectivity, drop/deliver messages, schedule events.
 
@@ -109,14 +110,33 @@ class CommunicationEngine:
         delivered = 0
         in_range = 0
 
-        # Calculate distances to all other agents
-        distances = np.linalg.norm(all_positions - sender_position, axis=1)
+        # Spatial candidate retrieval. Previously this scanned every agent,
+        # O(N) per broadcast and therefore O(N^2) per tick, while the manuscript
+        # claimed O(N log N) K-D Tree partitioning (audit F-22). The tree is
+        # supplied by the orchestrator, which owns position state and knows when
+        # it changes; if none is supplied we fall back to the full scan so this
+        # module stays usable standalone.
+        #
+        # The tree is only a CANDIDATE filter. The exact admission test below is
+        # unchanged (vectorised norm, `<= sender_tx_radius`, ascending index
+        # order), so per-neighbour RNG consumption is bit-identical to the scan.
+        if position_tree is not None:
+            candidates = RGGBuilder.query_radius(
+                position_tree, sender_position, sender_tx_radius
+            )
+        else:
+            candidates = range(len(all_positions))
 
-        for nbr_id in range(len(all_positions)):
-            if nbr_id == sender_id or not alive_mask[nbr_id]:
-                continue
+        candidates = [
+            i for i in candidates if i != sender_id and alive_mask[i]
+        ]
+        if not candidates:
+            return 0, 0
 
-            dist = float(distances[nbr_id])
+        distances = np.linalg.norm(all_positions[candidates] - sender_position, axis=1)
+
+        for slot, nbr_id in enumerate(candidates):
+            dist = float(distances[slot])
             if dist > sender_tx_radius:
                 continue
 

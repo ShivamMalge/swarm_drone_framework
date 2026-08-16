@@ -96,6 +96,19 @@ class Phase1Simulation:
         # exact; it replaces rebuilding the array from N copies on every call.
         self._positions = np.array([a._position for a in self.agents], dtype=float)
 
+        # K-D Tree over _positions, rebuilt lazily. _positions_dirty is set by
+        # _handle_kinematic_update, the only mutator of agent positions, so the
+        # tree can never be served stale regardless of how events interleave.
+        #
+        # In practice KINEMATIC_UPDATE (priority 1) fully precedes MSG_TRANSMIT
+        # (priority 3) at each timestamp, so positions are static across the
+        # whole broadcast phase and this costs one rebuild per tick. That is a
+        # performance property, not a correctness assumption: any interleaving
+        # simply triggers more rebuilds.
+        self._position_tree = None
+        self._positions_dirty = True
+        self.tree_rebuilds = 0
+
         # ── Communication (dedicated RNG streams) ───────────
         self.comm_engine = CommunicationEngine(
             rgg_builder=RGGBuilder(config.comm_radius),
@@ -269,6 +282,7 @@ class Phase1Simulation:
         # Keep the orchestrator's position matrix exact. apply_movement is the
         # sole mutator of agent positions, so syncing here is sufficient.
         self._positions[event.agent_id] = agent._position
+        self._positions_dirty = True
 
         # Energy consumed for movement (event-driven only)
         agent.consume_movement_energy(distance, self.config.p_move)
@@ -363,6 +377,7 @@ class Phase1Simulation:
             all_positions=all_positions,
             alive_mask=self.alive_mask,
             kernel=self.kernel,
+            position_tree=self._get_position_tree(),
         )
 
         # Energy consumed for communication (event-driven only).
@@ -771,6 +786,19 @@ class Phase1Simulation:
         (~11% of runtime at N=200, see rust_conversion_plan.md R0 results).
         """
         return self._positions
+
+    def _get_position_tree(self):
+        """
+        Return a K-D Tree over current positions, rebuilding only if they moved.
+
+        Rebuild count is instrumented so the O(N log N) claim in the manuscript
+        can be checked rather than asserted.
+        """
+        if self._positions_dirty or self._position_tree is None:
+            self._position_tree = RGGBuilder.build_tree(self._positions)
+            self._positions_dirty = False
+            self.tree_rebuilds += 1
+        return self._position_tree
 
     def _oracle_recipient_count(self, sender_id: int) -> int:
         """

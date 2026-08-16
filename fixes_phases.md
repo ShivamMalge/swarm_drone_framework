@@ -691,7 +691,83 @@ Also document the unstated fallback at `safety_projector.py:82-83` (`if low >= b
 **Verify:** line-by-line diff of the pseudocode against `safety_projector.py:55-100`; every code branch must appear in the pseudocode and vice versa.
 **Evidence:** _(paste the mapping)_
 
-### 2.2 — `[MS-14]` Report that the bisection is inert `[F-10]`
+### 2.0 — `[MS-20]` KD-tree — DONE, inside timebox
+
+**Implemented**, ~3 hours against the 1-day timebox. `RGGBuilder` gains `build_tree` / `query_radius`; the orchestrator owns the tree with a dirty flag set by `_handle_kinematic_update` (the sole position mutator), so it can never be served stale under any event interleaving. Correctness does not depend on ordering — ordering only sets how often we rebuild.
+
+The tree is a **candidate filter only**: query radius widened by 1 part in 1e12, results sorted ascending, then the original exact `np.linalg.norm <= tx_radius` test applied. This preserves per-neighbour RNG consumption order exactly, which a raw tree query would not.
+
+**Evidence — bit-identical, including RNG stream:**
+```
+  Unconstrained    events=111727 (ref 111727)  ToD=434.0  t50=105.0  ->True   tree_rebuilds=433
+  Static-Epsilon   events=136935 (ref 136935)  ToD=None   t50=106.0  ->True   tree_rebuilds=2000
+  Proposed         events=136935 (ref 136935)  ToD=None   t50=106.0  ->True   tree_rebuilds=2000
+BIT-IDENTICAL TO PRE-KDTREE REFERENCE: True
+
+  total_sent=100363 total_dropped=68780 total_delivered=31583
+  reference (pre-KDTree): total_sent=100363 total_dropped=68780 total_delivered=31583
+```
+`tree_rebuilds = 2000` over a 2000-tick run confirms exactly one rebuild per tick, as the priority ordering predicts.
+
+**Evidence — it buys nothing at tested scales:**
+```
+MS-20 -- linear scan vs K-D Tree, constant density, max_time=300
+     N    scan_s    tree_s   speedup    events   alive
+    50      5.19      5.11     1.02x     44708       1
+   100     10.64     10.52     1.01x     89097       5
+   200     21.88     21.25     1.03x    178524      10
+   400     49.65     45.09     1.10x    357994      20
+   800    113.36    118.35     0.96x    706592      32
+```
+At the suite operating point (N=100, max_time=2000), 3 alternating reps: scan median 21.7 s, tree median 21.7 s, **ratio 1.00×**. (An earlier single reading of 27.1 s was machine noise, not a regression.)
+
+**Decision: keep it.** The justification was always claim alignment, never speed. §III-C's K-D Tree claim is now literally true, the cost is zero, and it is the right structure for the Rust port. §III-C rewritten to state the derived complexity *and* that wall-clock at N ≤ 800 cannot distinguish it, and that no scaling exponent is claimed (`[MS-29]`).
+
+### 2.1 — `[MS-14]` The bisection is REDUNDANT, not inert — decision required before §IV is rewritten `[F-10 CORRECTED]`
+
+**My original F-10 explanation was wrong and is corrected here.** F-10 claimed consensus was causally inert because `RegimeClassifier` tests `FRAGMENTED` first and the variance-dependent branches are never reached. Measured, that is false:
+
+```
+Regime classification branch taken, 3 seeds, 10,221 classifications
+
+deciding branch                                       count    share
+FRAGMENTED (density/staleness) [staleness]            7,175   70.20%
+LATENCY_OSCILLATION (VARIANCE-dependent)              2,420   23.68%
+MARGINAL (VARIANCE-dependent)                           217    2.12%
+FRAGMENTED (density/staleness) [density]                183    1.79%
+ENERGY_CASCADE (energy slope)                           139    1.36%
+FRAGMENTED (density/staleness) [both]                    86    0.84%
+MARGINAL (staleness)                                      1    0.01%
+--------------------------------------------------------------------
+decisions where consensus variance was the decider      2,637   25.80%
+```
+
+Consensus variance decides **25.8 %** of classifications. The subsystem is live. The real mechanism is a **duplicated bound**:
+
+```
+[Proposed (bisection ON)]
+   agent gossip_epsilon  mean          = 0.0158935
+   epsilon ACTUALLY USED mean          = 0.00389701
+   internal clamp in gossip_consensus bound the value: 98.52% of calls
+[Static-Eps (bisection OFF)]
+   agent gossip_epsilon  mean          = 0.0429951
+   epsilon ACTUALLY USED mean          = 0.00390103
+   internal clamp in gossip_consensus bound the value: 98.62% of calls
+```
+
+The projector genuinely moves the parameter (0.0159 vs 0.0430 — a 2.7× difference). Then `gossip_consensus.py:69` independently recomputes `safe_bound = 0.99/(d_i(τ_max+1))` and clamps, on **98.5 % of calls**, so the epsilon actually applied is the same to three significant figures (0.003897 vs 0.003901). Algorithm 1's dynamic bound is overwritten downstream by a second implementation of itself.
+
+Compounding this, the two implementations **disagree**: `gossip_consensus.py:65` uses `math.ceil` for τ_max while `agent_core.py:517` uses `int()` (floor) — F-24. Two bounds, different discretisations, and the undocumented one wins.
+
+**Decision needed before §IV is rewritten. Recommendation: option (b).**
+
+- **(a) Report as a negative result.** Cheap, honest, no re-runs. But it would document an architecture in which the paper's Contribution 3 is knowingly overridden by an undocumented clamp — reporting a defect as a finding.
+- **(b) Make the projector authoritative** — remove the internal clamp from `compute_gossip_update`, so the bound is enforced once, in the component the paper describes. This is what §IV already claims happens. **Recommended.** Cost: a behaviour change requiring a full suite re-run, and it may move Table III. Also resolves F-24 by deleting one of the two discretisations.
+- **(c) Make the gossip function authoritative** — drop the projector's dynamic bound and describe Algorithm 1 as a box clamp plus EMA only. Honest, but discards the paper's stated contribution.
+
+I have **not** rewritten §IV pending this decision.
+
+### 2.2 — `[MS-14]` (superseded by 2.1 above) `[F-10]`
 
 Measured: the bisection fires on 2581/2588 checks and drives `gossip_epsilon` to 2.9e-05, yet removing it changes **nothing** in agent positions or energies (F-02), because `consensus_state` never reaches a deciding branch of `RegimeClassifier.classify`.
 
