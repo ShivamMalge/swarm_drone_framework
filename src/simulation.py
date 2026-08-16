@@ -75,6 +75,8 @@ class Phase1Simulation:
                 test_mode=config.test_mode,
                 global_info_enabled=config.global_info_enabled,
                 tuning_alpha=config.tuning_alpha,
+                p_move=config.p_move,
+                auction_timeout=config.auction_timeout,
             )
             
             # Experiment 2: Thermodynamics - Randomized low initial energy
@@ -494,7 +496,8 @@ class Phase1Simulation:
         agent.handle_auction_start(
             task_id=payload["task_id"],
             task_position=payload["position"],
-            task_reward=payload["reward"]
+            task_reward=payload["reward"],
+            current_time=event.timestamp,
         )
         
     def _handle_auction_resolve(self, event: Event) -> None:

@@ -81,6 +81,8 @@ class AgentCore:
         theta_safe_enabled: bool = True,
         test_mode: str | None = None,
         global_info_enabled: bool = False,
+        p_move: float = 0.1,
+        auction_timeout: float = 5.0,
     ) -> None:
         self.agent_id = agent_id
         self._position: np.ndarray = position.copy()
@@ -123,6 +125,13 @@ class AgentCore:
         # Patch 2: Active Task Tracking
         self.active_task_id: str | None = None
         self.active_task_pos: np.ndarray | None = None
+
+        # Auction protocol constants the agent legitimately knows: its own
+        # locomotion cost model, and the protocol's resolution window.
+        self._p_move = p_move
+        self._auction_timeout = auction_timeout
+        # Round-robin cursor over live auctions for gossip (see prepare_broadcast).
+        self._gossip_rotation = 0
 
         # Phase 3C: Adaptive Hybrid Supervisor
         self.supervisor = HybridSupervisor()
@@ -304,13 +313,26 @@ class AgentCore:
             if self._rng.random() > self.broadcast_rate:
                 return None
             
-        # Phase 2C: Attach one random known auction bid to gossip (O(1) payload size)
+        # Phase 2C: Attach one known auction bid to gossip (O(1) payload size).
+        # Expire dead entries first, then ROUND-ROBIN over the live auctions.
+        #
+        # Selection policy history, because two prior policies both failed:
+        # - uniform random over a never-purged buffer: diluted to a ~4% chance
+        #   of carrying a live bid once 120+ dead entries accumulated (F-13);
+        # - most-recently-seen: starves every concurrent auction -- gossiping
+        #   the newest refreshes its timestamp on receivers, so it stays
+        #   "newest" forever. With two near-simultaneous tasks, the older one's
+        #   bids never propagated and ALL 100 agents resolved themselves its
+        #   winner. (Soonest-resolving fails symmetrically: the older auction
+        #   monopolises the younger's entire bidding window.)
+        # Round-robin is deterministic, needs no RNG, and cannot starve.
         auction_bid = None
+        self._local_map.expire_auctions(current_time, self._auction_timeout)
         if self._local_map.active_auctions:
-            # Pick a random active auction to gossip
-            task_ids = list(self._local_map.active_auctions.keys())
-            task_id = self._rng.choice(task_ids)
-            best_bid, winner_id = self._local_map.active_auctions[task_id]
+            live = sorted(self._local_map.active_auctions)
+            task_id = live[self._gossip_rotation % len(live)]
+            self._gossip_rotation += 1
+            best_bid, winner_id, _seen = self._local_map.active_auctions[task_id]
             auction_bid = (task_id, best_bid, winner_id)
 
         return AgentMessage(
@@ -352,7 +374,9 @@ class AgentCore:
             # Phase 2C: process attached auction bid if present
             if msg.auction_bid is not None:
                 task_id, bid_val, bidder_id = msg.auction_bid
-                self._local_map.update_auction(task_id, bid_val, bidder_id)
+                self._local_map.update_auction(
+                    task_id, bid_val, bidder_id, msg.send_time
+                )
                 
             count += 1
         return count
@@ -385,32 +409,40 @@ class AgentCore:
     # ── Auction (called by AUCTION handlers) ────────────────
     
     def handle_auction_start(
-        self, 
-        task_id: str, 
-        task_position: np.ndarray, 
-        task_reward: float
+        self,
+        task_id: str,
+        task_position: np.ndarray,
+        task_reward: float,
+        current_time: float,
     ) -> None:
         """
         Process a newly spawned task. Compute local bid and cache it.
         The bid will naturally gossip out via periodic MSG_TRANSMIT.
+
+        An agent already committed to a task does not bid: active_task_id is
+        a single slot, and winning a second auction used to silently
+        overwrite the first task, abandoning it unconsumed (audit F-14).
         """
         if not self.is_alive or self.auction_participation <= 0.05:
             return
-            
+        if self.active_task_id is not None:
+            return
+
         from src.coordination.auction import compute_bid
-        
+
         # Patch 2: Cache task position in LocalMap
         self._local_map.task_metadata[task_id] = task_position.copy()
-        
+
         bid = compute_bid(
             agent_position=self._position,
             agent_energy=self._energy.energy,
             task_position=task_position,
-            task_reward=task_reward
+            task_reward=task_reward,
+            p_move=self._p_move,
         )
-        
-        if bid > float('-inf'):
-            self._local_map.update_auction(task_id, bid, self.agent_id)
+
+        if bid < float('inf'):
+            self._local_map.update_auction(task_id, bid, self.agent_id, current_time)
 
     def handle_auction_resolve(self, task_id: str) -> bool:
         """

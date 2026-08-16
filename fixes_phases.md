@@ -843,7 +843,42 @@ b_hi = compute_bid(pos, 100.0, task, 100.0); b_lo = compute_bid(pos, 5.0, task, 
 print(b_hi, b_lo, b_hi != b_lo)
 ```
 Must print `True`. Prints `False` today (both return `100.0 - dist`).
-**Evidence:** _(paste output)_
+
+**Evidence:** ✅ code DONE; ⚠️ manuscript BLOCKED on author review (Table III moved).
+
+Implemented: min-cost bid `dist + ω_e/E_i` (ω_e = E₀ = 100, a scale choice not a tuned one; reward dropped from the bid — it is constant per task across bidders and cannot change the winner, which also means the old `reward − dist` carried zero energy dependence); feasibility in consistent units (`p_move·dist ≥ E → inf`, and `inf` cannot win under min — the old `-inf` would have); no-bid-while-holding (kills the silent-abandonment overwrite); auction expiry in `LocalMap`; dead `update_local_winner` deleted (unused duplicate of `update_auction`'s rule — same pattern as F-10/F-24).
+
+```
+2.3 VERIFY -- energy must influence the bid
+  equidistant, E=100 -> bid 51.000
+  equidistant, E=5   -> bid inf          (feasibility: p_move*50 = 5.0 >= E)
+  differ: True   (was False: both returned reward-dist)
+feasibility in consistent units:
+  E=4.9, cost-to-reach=5.0 -> bid = inf   |   E=5.1 -> bid = 69.608
+```
+
+**Regression I introduced and caught: gossip starvation.** My first replacement for the random gossip pick was "most recently seen". That starves every concurrent auction — gossiping the newest refreshes its timestamp on receivers, so it stays newest forever. Exposed by `test_coverage` (a NEW failure, investigated rather than waved through): two tasks spawned 0.015 ticks apart, task_0's bids never propagated, **all 100 agents resolved themselves its winner**, and the whole swarm converged on one point instead of dispersing (final variance 53 vs required >100). "Soonest-resolving" fails symmetrically (the older auction monopolises the younger's entire bidding window). Fixed with deterministic **round-robin** over live auctions — no RNG, cannot starve. `test_coverage` passes again; seed 1018's catastrophic collapse (below) also resolved by this fix (ToD=None after).
+
+**Suite journey, all 50-seed runs:**
+
+| run | Proposed decay | note |
+|---|---|---|
+| pre-auction reference | 0.0501 ± 0.0005 | |
+| after bid/expiry/no-rebid, recency gossip | 0.0559 ± 0.0117 | bimodal: 49 runs at 0.050, **seed 1018 total death t=284, decay 0.352** — traced to sustained task pursuit draining the fragmented remnant (5–7 pursuers at v=2.0 with ~12 agents left); decomposition probe showed median unchanged at 0.0499 |
+| after round-robin fix (**definitive**) | **0.0514 ± 0.0021** | 47/50 censored |
+
+**⚠️ TABLE III MOVED — flagged per standing instruction, manuscript numbers NOT adopted:**
+```
+[Unconstrained]  t50  98 +/- 2   decay 0.2893 +/- 0.0216   survival 373 +/- 31  (0/50 censored)
+[Proposed]       t50  98 +/- 2   decay 0.0514 +/- 0.0021   47/50 censored
+[True Oracle]    identical to previous (bypasses the auction path)
+```
+- **Unconstrained decay and survival moved OUTSIDE their old CIs** (0.2282→0.2893, 474→373). Mechanism: the auction now works in the baseline arm too, so baseline agents pursue tasks and spend movement energy they previously never spent (the old broken auction was protecting the baseline the same way the duplicate ε-clamp was).
+- Proposed decay 0.0501→0.0514, CI 4× wider; censoring 49/50→47/50 (three full-death runs — the pursuit-drain tail risk persists at reduced rate).
+- t50 now 98 vs 98 — still indistinguishable, conclusion unchanged.
+- **Headline ratio becomes 5.6× (was 4.5×) — a favourable shift, which is exactly when these numbers must not be self-adopted.** PENDING block updated above Table III; §V-C untouched; awaiting author review.
+
+`[MS-15]` (Algorithm 2 pseudocode) and `[MS-16]` (§V-C causal chain) remain open pending that decision — the pseudocode should be written against whichever formulation is accepted.
 
 **`[MS-15]`** Update Algorithm 2's pseudocode to match: single-`τ_target` selection vs per-task bidding, the argmin/argmax convention, and the fact that resolution reads a cached winner rather than comparing against `min(B_nbrs)`.
 

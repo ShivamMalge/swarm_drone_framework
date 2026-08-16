@@ -35,8 +35,12 @@ class LocalMap:
         self._beliefs: dict[int, NeighborBelief] = {}
         
         # Phase 2C: Active auctions buffer
-        # Map: task_id -> (highest_bid_value, winning_agent_id)
-        self.active_auctions: dict[str, tuple[float, int]] = {}
+        # Map: task_id -> (best_bid_value, winning_agent_id, last_seen_time)
+        # Bids are COSTS: the MINIMUM bid wins (see coordination/auction.py).
+        # last_seen_time supports expiry: without it, unresolved auctions
+        # accumulated forever and the random gossip pick had a ~4% chance of
+        # broadcasting a bid that still mattered (audit F-13).
+        self.active_auctions: dict[str, tuple[float, int, float]] = {}
         # Patch 2: Task Metadata (position)
         self.task_metadata: dict[str, np.ndarray] = {}
 
@@ -85,24 +89,51 @@ class LocalMap:
         self._beliefs.clear()
 
     # Phase 2C
-    def update_auction(self, task_id: str, bid_value: float, bidder_id: int) -> bool:
+    def update_auction(
+        self, task_id: str, bid_value: float, bidder_id: int, timestamp: float
+    ) -> bool:
         """
-        Updates the local best-known bid for a task.
-        Returns True if the local belief was updated, False otherwise.
+        Updates the local best-known bid for a task. Bids are costs: the
+        MINIMUM bid wins, tie-broken on lowest agent_id. The stored
+        last-seen time is always refreshed, so an auction stays alive in
+        this map only while information about it keeps arriving.
+
+        Returns True if the winning (bid, bidder) belief changed.
         """
         if task_id not in self.active_auctions:
-            self.active_auctions[task_id] = (bid_value, bidder_id)
+            self.active_auctions[task_id] = (bid_value, bidder_id, timestamp)
             return True
-            
-        current_best_bid, current_best_id = self.active_auctions[task_id]
-        
-        # Max bid wins
-        if bid_value > current_best_bid:
-            self.active_auctions[task_id] = (bid_value, bidder_id)
+
+        current_best_bid, current_best_id, seen = self.active_auctions[task_id]
+
+        # Min bid (cost) wins
+        if bid_value < current_best_bid:
+            self.active_auctions[task_id] = (bid_value, bidder_id, timestamp)
             return True
         # Tie-break on lowest agent_id
-        elif bid_value == current_best_bid and bidder_id < current_best_id:
-            self.active_auctions[task_id] = (bid_value, bidder_id)
+        if bid_value == current_best_bid and bidder_id < current_best_id:
+            self.active_auctions[task_id] = (bid_value, bidder_id, timestamp)
             return True
-            
+
+        # Belief unchanged, but refresh the last-seen time.
+        self.active_auctions[task_id] = (
+            current_best_bid, current_best_id, max(timestamp, seen),
+        )
         return False
+
+    def expire_auctions(self, current_time: float, max_age: float) -> int:
+        """
+        Drop auction entries not refreshed within *max_age*.
+
+        Returns the number of entries removed. Without expiry the auction
+        buffer grew monotonically (122+ dead entries by end of run) and
+        random gossip selection was diluted to a ~4% chance of carrying a
+        bid that still mattered (audit F-13).
+        """
+        stale = [
+            tid for tid, (_b, _w, ts) in self.active_auctions.items()
+            if current_time - ts > max_age
+        ]
+        for tid in stale:
+            del self.active_auctions[tid]
+        return len(stale)
