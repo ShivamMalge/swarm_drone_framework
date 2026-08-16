@@ -86,25 +86,31 @@ def compute_largest_connected_component(
 
 def compute_spectral_gap(adj: dict[int, list[int]], n: int) -> float:
     """
-    Compute algebraic connectivity (lambda_2 of Laplacian).
+    Compute algebraic connectivity (lambda_2 of the graph Laplacian).
+
+    The Laplacian is real symmetric by construction, so ``eigvalsh`` is the
+    correct routine: it returns real eigenvalues already sorted ascending.
+    The previous implementation used ``eigvals`` (the general non-symmetric
+    solver), which returns unordered complex-typed results and needed a manual
+    ``sort(real(...))`` to recover lambda_2 -- needlessly fragile here.
+
+    Returns 0.0 for a disconnected graph, which is the exact value of lambda_2
+    when the graph has more than one connected component.
     """
     if n <= 1:
         return 0.0
-        
+
     # Build Laplacian L = D - A
     L = np.zeros((n, n), dtype=float)
-    
+
     for u in adj:
         degree = len(adj[u])
         L[u, u] = degree
         for v in adj[u]:
             L[u, v] = -1.0
-            
-    # Compute eigenvalues
+
     try:
-        eigvals = np.linalg.eigvals(L)
-        # Sort real components
-        eigvals = np.sort(np.real(eigvals))
+        eigvals = np.linalg.eigvalsh(L)  # real symmetric -> sorted ascending
         return float(eigvals[1])
     except np.linalg.LinAlgError:
         return 0.0

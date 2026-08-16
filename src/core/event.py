@@ -31,8 +31,12 @@ class EventType(enum.IntEnum):
     AUCTION_START = 8
     AUCTION_RESOLVE = 9
     
+    
     # Phase 2D
     REGIME_UPDATE = 10
+    
+    # Continuous Spawning
+    TASK_SPAWN = 11
 
 
 # Global auto-incrementing counter for deterministic tie-breaking.

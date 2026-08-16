@@ -19,6 +19,7 @@ def run():
         comm_radius=20.0,
         psi_max=0.05,
         test_mode="percolation",
+        coverage_enabled=True,
         log_dir=log_dir,
         max_time=500.0
     )
