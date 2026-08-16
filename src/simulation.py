@@ -679,6 +679,7 @@ class Phase1Simulation:
 
         self.connectivity_log.append({
             "time": t,
+            "n_alive": int(n_alive),
             "lcc": metrics["largest_component"],
             "component_count": metrics["component_count"],
             "connectivity_ratio": metrics["connectivity_ratio"],
