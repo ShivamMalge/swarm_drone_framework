@@ -96,24 +96,31 @@ class CommunicationEngine:
 
         Returns
         -------
-        int
-            Number of delivery events scheduled.
+        tuple[int, int]
+            (delivery events scheduled, living agents inside sender_tx_radius).
+
+            The second value is returned so the orchestrator can bill
+            transmission energy without recomputing the same distances. It
+            counts exactly the agents for which total_sent was incremented:
+            alive, not the sender, and within sender_tx_radius.
         """
         # Evaluate neighbors dynamically using sender's unique tx_radius
         psi_val = self._psi.evaluate(sender_position, send_time)
         delivered = 0
-        
+        in_range = 0
+
         # Calculate distances to all other agents
         distances = np.linalg.norm(all_positions - sender_position, axis=1)
 
         for nbr_id in range(len(all_positions)):
             if nbr_id == sender_id or not alive_mask[nbr_id]:
                 continue
-                
+
             dist = float(distances[nbr_id])
             if dist > sender_tx_radius:
                 continue
 
+            in_range += 1
             self.total_sent += 1
 
             # Evaluate non-linear packet drop based on SNR / distance
@@ -147,4 +154,4 @@ class CommunicationEngine:
             self.total_delivered += 1
             delivered += 1
 
-        return delivered
+        return delivered, in_range

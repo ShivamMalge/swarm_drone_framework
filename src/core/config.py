@@ -132,6 +132,20 @@ class SimConfig:
     theta_safe_enabled: bool = True
     stability_delay_max: float = 5.0 # Extra stochastic delay for stability test
 
+    # True Oracle
+    global_info_enabled: bool = False
+
+    # How the oracle is billed for communication. The oracle receives global
+    # state every tick; this selects what that awareness is charged for.
+    #   "all_to_all"    -- billed for every other living agent (N-1 recipients).
+    #                      Global awareness implies global bandwidth. Primary model.
+    #   "per_neighbour" -- billed only for living agents inside comm_radius,
+    #                      identical accounting to every decentralized arm.
+    #                      Sensitivity variant: isolates coordination quality
+    #                      from communication cost.
+    # No effect unless global_info_enabled is True.
+    oracle_comm_billing: str = "all_to_all"
+
     def spawn_rng_streams(self) -> dict[str, np.random.Generator]:
         """
         Spawn independent RNG streams from a single SeedSequence.
