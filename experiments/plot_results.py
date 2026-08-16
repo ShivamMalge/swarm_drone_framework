@@ -64,8 +64,10 @@ def plot_percolation():
     real_time = df['time'] * DT
     
     plt.figure()
-    plt.plot(real_time, df['true_lambda_2'], label='True Algebraic Connectivity ($\lambda_2$)', color='blue', linewidth=2)
-    plt.plot(real_time, df['avg_local_lambda_proxy'] / 100.0, label='Scaled Local Proxy ($\hat{\lambda}_2$)', color='orange', linestyle='--', linewidth=2)
+    # No rescaling. The previous /100.0 had no derivation; it existed to bring a
+    # neighbour-count column onto the same axis as lambda_2 (audit F-19).
+    plt.plot(real_time, df['true_lambda_2'], label='True Algebraic Connectivity ($\lambda_2$), living agents', color='blue', linewidth=2)
+    plt.plot(real_time, df['avg_local_lambda_proxy'], label='Local Mixing Proxy ($\hat{\lambda}_2$), Eq. 2', color='orange', linestyle='--', linewidth=2)
     plt.axhline(y=0.1, color='red', linestyle=':', label='$\lambda_{crit}$ (Fragmentation Threshold)')
     
     plt.title("Spectral Stability Under Environmental Jamming")
