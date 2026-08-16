@@ -605,6 +605,70 @@ Must print `True`. It will print `False` today.
 
 ---
 
+## Phase 1.6 — Pre-Phase-2 hardening (author-directed, 2026-08-16)
+
+### 1.6.1 — Close the scratch-log hole `[self-inflicted, caught during 1.5]`
+
+My 1.5 verification runs used `test_mode='thermodynamics'` against the real `logs/` directory, clobbering the merged CSV. It was caught only because `plot_results.py` raised `KeyError`. **Had the corrupted file stayed parseable, it would have produced a plausible but wrong figure — the exact F-01 failure mode.** Two structural fixes, not a convention:
+
+1. **Derived outputs renamed so a raw run cannot collide with them.** A bare simulation with `test_mode='thermodynamics'` writes `experiment_2_thermodynamics.csv`; the merge step now writes `experiment_2_thermodynamics_merged.csv` (same for stability). The collision is now impossible rather than merely discouraged.
+2. **`plot_results.py` validates its inputs.** New `load_checked()` asserts required columns per figure and names the producing script in the error.
+
+**Evidence:** ✅ the guard firing on a genuinely missing input:
+```
+FileNotFoundError: logs\experiment_3_stability_merged.csv not found.
+Generate it with: python experiments/run_stability_test.py
+```
+and passing once regenerated:
+```
+  [experiment_3_stability_merged.csv] 40 rows, columns verified
+  [experiment_1_percolation.csv] 100 rows, columns verified
+  [experiment_2_thermodynamics_merged.csv] 60 rows, columns verified
+```
+
+### 1.6.2 — Repair Algorithm 1's tests before documenting it `[F-08, blocks MS-13]`
+
+Documenting an untested component is backwards, especially this one: per F-11 the box clamp is the load-bearing step behind the entire surviving result. All 4 tests failed with `TypeError: missing 'theta_nominal'`.
+
+**Evidence:** ✅ 4 repaired + 4 new tests asserting the two-stage contract:
+```
+tests/test_safety_projector.py::test_safety_projector_clips_values PASSED
+tests/test_safety_projector.py::test_safety_projector_passes_valid_values PASSED
+tests/test_safety_projector.py::test_safety_projector_handles_unknown_keys PASSED
+tests/test_safety_projector.py::test_safety_projector_determinism PASSED
+tests/test_safety_projector.py::test_box_clamp_raises_coverage_gain_from_zero_to_lower_bound PASSED
+tests/test_safety_projector.py::test_velocity_scale_zero_is_NOT_clamped PASSED
+tests/test_safety_projector.py::test_bisection_operates_on_the_box_clamped_value PASSED
+tests/test_safety_projector.py::test_bisection_does_not_fire_when_value_is_already_safe PASSED
+
+============================== 8 passed in 0.34s ==============================
+```
+The new tests pin exactly what `[MS-13]` must document: stage 1 raises `coverage_gain` 0.0 → 0.5 (and that this clears the `> 0.05` gate keeping the agent in the coverage law), stage 2 then bisects **the clamped value**, and `velocity_scale = 0.0` is *not* clamped despite a code comment claiming it is.
+
+Suite: **15 failed / 95 passed**, down from 19/87. No new failures.
+
+### 1.6.3 — Clamp ψ and mark the saturated regime `[F-39 / MS-30]`
+
+**Evidence:** ✅ clamp added in `InterferenceField.evaluate`, and it is behaviour-neutral:
+```
+F-39 CLAMP VERIFY
+  psi_max=2.55 -> evaluate() = 1.0   (must be 1.0)
+  psi_max=-0.3 -> evaluate() = 0.0   (must be 0.0)
+  psi_max=0.40 -> evaluate() = 0.4   (unchanged in range)
+
+Percolation run AFTER clamp:
+  final psi_max attribute = 2.550 (ramp still runs)
+  evaluated psi           = 1.000 (clamped)
+  agents alive at end     = 8   (pre-clamp A/B gave 8)
+```
+Identical outcome, because ψ > 1 already produced a negative `p_survive` and hence total drop. This is a correctness/clarity fix, not a behavioural one.
+
+**Figure 2:** full range retained, with the post-blackout region shaded and annotated rather than truncated — the saturated regime is informative once labelled. §V-B no longer claims jamming "increases to 100%".
+
+**Y-axis relabelled.** The regenerated figure made the F-19 scale gap visible (λ₂ flat below 0.151, proxy peaking above 7), but the axis still read "Fiedler Value" for both curves — re-introducing the exact conflation the `/100` created. Now "Magnitude (curves are not on a common scale)", with the caption stating it.
+
+---
+
 ## Phase 2 — Align the algorithms in the paper with the algorithms in the code
 
 ### 2.1 — `[MS-13]` Add Algorithm 1 Step 1 (box clamp) `[F-11]`

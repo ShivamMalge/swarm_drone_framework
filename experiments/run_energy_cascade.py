@@ -52,7 +52,7 @@ def run():
     # Merge CSVs
     file_a = os.path.join(log_dir, "experiment_2_thermodynamics_run_A.csv")
     file_b = os.path.join(log_dir, "experiment_2_thermodynamics_run_B.csv")
-    output_file = os.path.join(log_dir, "experiment_2_thermodynamics.csv")
+    output_file = os.path.join(log_dir, "experiment_2_thermodynamics_merged.csv")
     
     if os.path.exists(file_a) and os.path.exists(file_b):
         data_a = {}

@@ -61,22 +61,31 @@ class InterferenceField:
         """
         Compute ψ(q, t) at the given position and time.
 
+        ψ is an attenuation *fraction* and is clamped to [0, 1]. Callers use it
+        as ``(1 - ψ)``, so an unclamped ψ > 1 makes the survival probability
+        negative -- which happens to behave like total blackout, but only by
+        accident, and it lets experiments ramp ψ to nonsense values (the
+        percolation sweep reaches ψ = 2.55, i.e. "255% jamming"; audit F-39).
+        Clamping makes total blackout explicit and bounds the quantity to its
+        documented range.
+
         Returns
         -------
         float
-            Interference intensity in [0, ψ_max].
+            Interference intensity in [0, min(ψ_max, 1)].
         """
         if self.mode == FieldMode.CONSTANT:
-            return self.psi_max
+            raw = self.psi_max
 
-        if self.mode == FieldMode.GAUSSIAN_BLOB:
+        elif self.mode == FieldMode.GAUSSIAN_BLOB:
             dist_sq = float(np.sum((position - self.center) ** 2))
-            raw = np.exp(-dist_sq / (2.0 * self.sigma**2))
-            return float(self.psi_max * raw)
+            raw = self.psi_max * float(np.exp(-dist_sq / (2.0 * self.sigma**2)))
 
-        if self.mode == FieldMode.PULSE:
+        elif self.mode == FieldMode.PULSE:
             phase = (time % self.pulse_period) / self.pulse_period
-            active = phase < self.pulse_duty
-            return self.psi_max if active else 0.0
+            raw = self.psi_max if phase < self.pulse_duty else 0.0
 
-        return 0.0
+        else:
+            raw = 0.0
+
+        return float(min(max(raw, 0.0), 1.0))

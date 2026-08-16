@@ -23,13 +23,53 @@ plt.rcParams.update({
 
 DT = 0.1  # 100ms per tick
 
+# Which columns each figure requires, and which script produces them.
+# A CSV that parses but carries the wrong columns is the dangerous case: it
+# yields a plausible-looking but incorrect figure, which is exactly how the
+# fabricated Figure 4 survived (audit F-01). Validate explicitly and name the
+# generating script in the error so the fix is obvious.
+REQUIRED_COLUMNS = {
+    "experiment_3_stability_merged.csv": (
+        ["time", "max_velocity_cmd_run_A", "max_velocity_cmd_run_B"],
+        "experiments/run_stability_test.py",
+    ),
+    "experiment_1_percolation.csv": (
+        ["time", "true_lambda_2", "avg_local_lambda_proxy"],
+        "experiments/run_percolation.py",
+    ),
+    "experiment_2_thermodynamics_merged.csv": (
+        ["time", "framework_total_energy", "baseline_total_energy",
+         "framework_active_drones", "baseline_active_drones"],
+        "experiments/run_energy_cascade.py",
+    ),
+}
+
+
+def load_checked(filename):
+    """Load a figure's source CSV, failing loudly if it is not the expected file."""
+    path = os.path.join(LOG_DIR, filename)
+    required, producer = REQUIRED_COLUMNS[filename]
+    if not os.path.exists(path):
+        raise FileNotFoundError(
+            f"{path} not found. Generate it with: python {producer}"
+        )
+    df = pd.read_csv(path)
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        raise ValueError(
+            f"{path} is missing required columns {missing}.\n"
+            f"Found: {list(df.columns)}\n"
+            f"This file is not the output of {producer}. It was most likely "
+            f"overwritten by an ad-hoc simulation run writing into '{LOG_DIR}'. "
+            f"Regenerate with: python {producer}"
+        )
+    if len(df) == 0:
+        raise ValueError(f"{path} is empty. Regenerate with: python {producer}")
+    print(f"  [{filename}] {len(df)} rows, columns verified")
+    return df
+
 def plot_stability():
-    file_path = os.path.join(LOG_DIR, "experiment_3_stability.csv")
-    if not os.path.exists(file_path):
-        print(f"File not found: {file_path}")
-        return
-        
-    df = pd.read_csv(file_path)
+    df = load_checked("experiment_3_stability_merged.csv")
     # Fix time scale
     real_time = df['time'] * DT
     
@@ -55,12 +95,7 @@ def plot_stability():
     print("Generated kinematic_stability.png")
 
 def plot_percolation():
-    file_path = os.path.join(LOG_DIR, "experiment_1_percolation.csv")
-    if not os.path.exists(file_path):
-        print(f"File not found: {file_path}")
-        return
-        
-    df = pd.read_csv(file_path)
+    df = load_checked("experiment_1_percolation.csv")
     real_time = df['time'] * DT
     
     plt.figure()
@@ -69,10 +104,26 @@ def plot_percolation():
     plt.plot(real_time, df['true_lambda_2'], label='True Algebraic Connectivity ($\lambda_2$), living agents', color='blue', linewidth=2)
     plt.plot(real_time, df['avg_local_lambda_proxy'], label='Local Mixing Proxy ($\hat{\lambda}_2$), Eq. 2', color='orange', linestyle='--', linewidth=2)
     plt.axhline(y=0.1, color='red', linestyle=':', label='$\lambda_{crit}$ (Fragmentation Threshold)')
-    
+
+    # Mark where the jamming ramp saturates. run_percolation.py starts at
+    # psi_max = 0.05 and _handle_env_update adds interference_growth_rate * dt * 5
+    # = 0.025 every 5 ticks, so psi reaches 1.0 (total blackout, zero delivery
+    # probability) at t = 191 ticks. Everything to the right of this line is a
+    # saturated regime, not a jamming gradient -- audit F-39.
+    blackout_tick = 191.0
+    if real_time.max() > blackout_tick * DT:
+        plt.axvspan(blackout_tick * DT, real_time.max(), color='red', alpha=0.07)
+        plt.axvline(x=blackout_tick * DT, color='red', linestyle='--', alpha=0.6)
+        plt.text(blackout_tick * DT + 0.4, plt.ylim()[1] * 0.55,
+                 'total blackout ($\psi = 1$)\nno packet can be delivered',
+                 rotation=90, va='center', fontsize=9, alpha=0.8, color='darkred')
+
     plt.title("Spectral Stability Under Environmental Jamming")
     plt.xlabel("Simulation Time (s)")
-    plt.ylabel("Fiedler Value ($\lambda_2$)")
+    # NOT "Fiedler Value": only the blue curve is one. The proxy is a different
+    # quantity on a different scale, and labelling the shared axis as a Fiedler
+    # value is precisely the conflation the old /100 rescaling created (F-19).
+    plt.ylabel("Magnitude (curves are not on a common scale)")
     plt.legend(loc='upper right')
     plt.grid(True, linestyle=':', alpha=0.7)
     plt.tight_layout()
@@ -80,12 +131,7 @@ def plot_percolation():
     print("Generated spectral_stability.png")
 
 def plot_thermodynamics():
-    file_path = os.path.join(LOG_DIR, "experiment_2_thermodynamics.csv")
-    if not os.path.exists(file_path):
-        print(f"File not found: {file_path}")
-        return
-        
-    df = pd.read_csv(file_path)
+    df = load_checked("experiment_2_thermodynamics_merged.csv")
     real_time = df['time'] * DT
     
     fig, ax1 = plt.subplots()
