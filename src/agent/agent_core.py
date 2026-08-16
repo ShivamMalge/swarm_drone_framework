@@ -147,6 +147,9 @@ class AgentCore:
         self.oracle_centroid: np.ndarray | None = None
         self.total_ticks: int = 0
         self.coverage_ticks: int = 0
+        # Last commanded velocity, cached by the KINEMATIC_UPDATE handler so the
+        # metrics layer can observe it without re-running compute_velocity().
+        self.last_velocity: np.ndarray = np.zeros(2)
         
         # Phase 5: Distributed Spectral Estimation Tracking
         self._prev_variance = 0.0
@@ -189,10 +192,6 @@ class AgentCore:
         """
         if not self.is_alive:
             return np.zeros(2)
-
-        self.total_ticks += 1
-        if self.global_info_enabled or self.coverage_gain > 0.05:
-            self.coverage_ticks += 1
 
         if self.active_task_pos is not None:
             # Patch 2: Prioritize moving toward active task if won auction

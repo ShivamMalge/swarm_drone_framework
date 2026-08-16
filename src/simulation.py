@@ -158,6 +158,9 @@ class Phase1Simulation:
         self.kernel.register_handler(
             EventType.TASK_SPAWN, self._handle_task_spawn
         )
+        self.kernel.register_handler(
+            EventType.ENV_UPDATE, self._handle_env_update
+        )
 
     def _check_death_conditions(self, timestamp: float) -> None:
         alive_count = self.alive_mask.sum()
@@ -224,6 +227,14 @@ class Phase1Simulation:
             event_type=EventType.METRICS_LOG,
         ))
 
+        # Exogenous environment ramp (percolation experiment only), on the same
+        # cadence the metrics handler previously applied it at.
+        if self.config.test_mode == "percolation":
+            self.kernel.schedule_event(Event(
+                timestamp=dt,
+                event_type=EventType.ENV_UPDATE,
+            ))
+
     # ── Event handlers ──────────────────────────────────────
 
     def _handle_kinematic_update(self, event: Event) -> None:
@@ -236,8 +247,20 @@ class Phase1Simulation:
         if self.config.global_info_enabled and agent.coverage_gain > 0.05:
             agent.oracle_centroid = self._compute_oracle_centroid(event.agent_id)
 
-        # Agent computes velocity from local state only
+        # Agent computes velocity from local state only.
+        # Tick accounting lives HERE, not inside compute_velocity(): a tick is a
+        # kinematic event, and the metrics logger also calls compute_velocity()
+        # for reporting. Counting inside it conflated logging with simulation
+        # (audit F-17).
+        agent.total_ticks += 1
+        if agent.global_info_enabled or agent.coverage_gain > 0.05:
+            agent.coverage_ticks += 1
+
         velocity = agent.compute_velocity()
+        # Cached so the metrics logger can report the commanded velocity without
+        # re-invoking compute_velocity(), whose random-walk branch draws from the
+        # agent RNG and would otherwise perturb the trajectory it is measuring.
+        agent.last_velocity = velocity
 
         # Apply movement (returns distance)
         distance = agent.apply_movement(
@@ -556,8 +579,26 @@ class Phase1Simulation:
             agent_id=event.agent_id,
         ))
 
+    def _handle_env_update(self, event: Event) -> None:
+        """
+        Advance the exogenous environment.
+
+        Owns the percolation experiment's interference ramp. This is the only
+        place environmental physics is mutated on a schedule; the metrics
+        handler must remain a pure observer.
+        """
+        self.interference.psi_max += (
+            self.config.interference_growth_rate * self.config.dt * 5
+        )
+        next_t = event.timestamp + self.config.dt * 5
+        if next_t <= self.config.max_time:
+            self.kernel.schedule_event(Event(
+                timestamp=next_t,
+                event_type=EventType.ENV_UPDATE,
+            ))
+
     def _handle_metrics_log(self, event: Event) -> None:
-        """Log metrics snapshot (centralized, read-only)."""
+        """Log metrics snapshot (centralized, strictly read-only)."""
         t = event.timestamp
         alive_agents = [a for a in self.agents if a.is_alive]
         hibernating = [a for a in alive_agents if a.current_strategy.name == "ENERGY_CONSERVATION"]
@@ -599,18 +640,27 @@ class Phase1Simulation:
 
         # ── Experiment 1: Percolation & Fragmentation ──
         if self.config.test_mode == "percolation":
-            # Gradually increase interference
-            self.interference.psi_max += self.config.interference_growth_rate * self.config.dt * 5
-            
+            # NOTE: the interference ramp that drives this experiment used to be
+            # applied HERE, inside the metrics handler -- a function documented
+            # as "centralized, read-only" that was in fact driving the physics
+            # (audit F-17). It now has its own ENV_UPDATE event; see
+            # _handle_env_update.
+
             # Count regimes
             regime_dist = self._get_regime_distribution()
             stable_count = regime_dist.get(Regime.STABLE.name, 0)
             fragmented_count = regime_dist.get(Regime.FRAGMENTED.name, 0)
             
-            # Estimate local connectivity (average believed neighbors)
+            # Mean of the agents' own Eq.(2) local mixing proxy.
+            # This column was previously the mean believed-NEIGHBOUR-COUNT, logged
+            # and plotted under the name avg_local_lambda_proxy and the legend
+            # \hat{lambda}_2 -- a quantity with no relation to Eq.(2), scaled by an
+            # unexplained /100 at plot time. Meanwhile the actual proxy
+            # (AgentCore._lambda_2_proxy) was computed every regime update and
+            # never read by anything (audit F-19).
             avg_local_lambda = 0.0
             if alive_agents:
-                avg_local_lambda = sum(len(a._local_map.get_all_neighbors()) for a in alive_agents) / len(alive_agents)
+                avg_local_lambda = sum(a._lambda_2_proxy for a in alive_agents) / len(alive_agents)
             
             # Count edges: query_pairs returns undirected pairs.
             # Alive-only, for the same reason as lambda_2 above: this column
@@ -640,10 +690,9 @@ class Phase1Simulation:
             # Mean cell area = Total area / count
             cell_area = (self.config.grid_width * self.config.grid_height) / len(alive_agents) if alive_agents else 0.0
             
-            # Average kinematic velocity
-            all_velocities = []
-            for agent in alive_agents:
-                all_velocities.append(np.linalg.norm(agent.compute_velocity()))
+            # Average kinematic velocity, read from the cached command rather
+            # than recomputed: compute_velocity() consumes agent RNG (audit F-17).
+            all_velocities = [float(np.linalg.norm(a.last_velocity)) for a in alive_agents]
             avg_v = sum(all_velocities) / len(all_velocities) if all_velocities else 0.0
             
             self.kernel_logger.log_snapshot({
@@ -659,8 +708,8 @@ class Phase1Simulation:
 
         # ── Experiment 3: Θ_safe Control Stability ──
         elif self.config.test_mode == "stability":
-            # Track max velocity cmd
-            all_v = [np.linalg.norm(a.compute_velocity()) for a in alive_agents]
+            # Track max velocity cmd, from the cached command (see above).
+            all_v = [float(np.linalg.norm(a.last_velocity)) for a in alive_agents]
             max_v = max(all_v) if all_v else 0.0
             
             snap = {
