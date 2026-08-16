@@ -767,6 +767,52 @@ Compounding this, the two implementations **disagree**: `gossip_consensus.py:65`
 
 I have **not** rewritten §IV pending this decision.
 
+#### RESOLUTION — option (b) taken (author decision, 2026-08-16). ✅ DONE
+
+Sequence executed as directed: clamp removed → sole-enforcement verified → F-24 confirmed dead → full suite re-run → §IV rewritten last.
+
+**Code changes:**
+- `gossip_consensus.py`: internal clamp deleted; `compute_gossip_update` applies the given epsilon verbatim. Module docstring now states the one-bound-one-owner policy and why a clamp must not be reintroduced.
+- `agent_core.py:523`: surviving bound switched `int()` → `math.ceil()` — the conservative discretisation, and the one the previously-winning clamp used, so the bound's semantics carry over. **F-24 is dead by construction: one implementation remains.**
+  ```
+  === bound implementations remaining (must be agent_core only) ===
+  src/agent/agent_core.py:524:                safe_bound = 0.99 / (d_i * (tau_max + 1))
+  src/coordination/gossip_consensus.py:9:  [docstring text only]
+  ```
+- `audit_findings.md` F-10 corrected in place with the measured branch shares (variance decides 25.80 %), per the author's instruction not to leave the wrong explanation standing.
+
+**Sole-enforcement verification (every call instrumented):**
+```
+[Proposed (bisection ON)]     applied != given on 0 calls   mean eps used = 0.0161845
+[Static-Eps (bisection OFF)]  applied != given on 0 calls   mean eps used = 0.0427108
+[Unconstrained (no projector)]applied != given on 0 calls   mean eps used = 0.0608024
+```
+Pre-fix, both bounded arms applied 0.0039 identically. The projector's bound now governs: Proposed's applied epsilon rose ~4×, exactly as predicted.
+
+**Exposed consequence, reported not hidden:** with no bound anywhere, the Unconstrained arm's consensus **genuinely diverges** — `max|state| = 2.1e+39` at t=600. The duplicate clamp had been silently stabilising the baseline too. On one seed the divergence reached ~1e154+ and crashed `statistics.variance` (exact-fraction arithmetic) inside the regime monitor, killing the MC suite:
+```
+OverflowError: integer division result too large for a float
+```
+Fixed in `local_proxies.py`: the variance proxy now saturates at `VARIANCE_PROXY_CEILING = 1e12` (np.var, ddof=1) instead of crashing. This is overflow protection on a monitor, not tuning: the classifier only thresholds this value at ~1.5, so saturation changes no decision. Divergence remains fully observable — it reads as maximal variance, which is the semantically correct proxy signal. Unit-verified including the exact crash case (1e160-scale states → 1e12) and the spectral proxy under saturation (ratio 1 → λ̂ = 0, finite).
+
+**Full 50-seed suite re-run — Table III does NOT shift materially. MS-04..MS-09 stay discharged:**
+```
+[Unconstrained]  t50 100 +/- 2   decay 0.2282 +/- 0.0175   survival 474 +/- 38  (was: 100, 0.2277, 476)
+[Proposed]       t50 101 +/- 2   decay 0.0501 +/- 0.0005   49/50 censored       (was: identical)
+[True Oracle]    t50  21 +/- 0   decay 2.8010 +/- 0.2067   survival  39 +/- 4   (was: identical)
+```
+Every delta is inside its CI. The 4× epsilon change and genuine baseline divergence move **nothing physical** — confirming the bound protects the consensus layer while contributing negligibly to the energy result. That decomposition is now stated in §V-D rather than left implied.
+
+**Oracle sensitivity re-run:** only the Unconstrained row moved, within CI (decay 0.2567→0.2462, survival 427→442); manuscript table updated. Oracle rows identical (they bypass gossip).
+
+**§IV rewritten against the new numbers (`[MS-13]` discharged in the same pass):**
+- Algorithm 1 pseudocode now has **Step 2a (static box clamp, every parameter)** and **Step 2b (dynamic-bound bisection, `gossip_epsilon` only)**, the `low ≥ b_k → 0.99·b_k` fallback, and ceil discretisation — a line-for-line match to `safety_projector.py` + `agent_core.py`, each property pinned by a passing test from 1.6.2. The false precondition line is gone; three implementation properties (bisection operates on the clamped value; no nominal-safety precondition; EMA lag means transient exceedance of a just-tightened bound) are stated explicitly.
+- The ε-bound sentence no longer claims it "prevents kinematic divergence" — consensus state does not drive kinematics. It protects the consensus iteration, with the measured counterfactual (states > 1e39 without it) cited.
+- **Bonus correction:** §IV's "empirically observed to deviate from the true global average by approximately 5% to 8%" was unverified. Measured (10 seeds, t=100, pre-attrition): **mean 2.59 %, range 0.33–6.03 %**. Text now carries the measured numbers.
+- **Second bonus:** my earlier evidence that "15 million" was gone was a **false negative** — the string survived in §V-A as `$15 \text{ million}$`, defeating the plain grep. Removed now, along with "Gaussian attenuation" and the false "all quantitative experiments were averaged over 50 runs" blanket, replaced by a per-experiment configuration table (`[MS-23]` discharged: N/runs/seeds/horizon per experiment, measured event counts).
+
+All stale-claim greps now 0 with LaTeX-robust patterns. Figures regenerated post-(b): fig2 (percolation) changed as expected; fig1/fig3 hashes identical — those experiments are insensitive to the epsilon change at their seeds. All md5-match. Suite: same 15 failures, none new.
+
 ### 2.2 — `[MS-14]` (superseded by 2.1 above) `[F-10]`
 
 Measured: the bisection fires on 2581/2588 checks and drives `gossip_epsilon` to 2.9e-05, yet removing it changes **nothing** in agent positions or energies (F-02), because `consensus_state` never reaches a deciding branch of `RegimeClassifier.classify`.

@@ -242,7 +242,15 @@ The manuscript's supporting narrative — *"the Unconstrained swarm engages in r
 - The entire 527 → 1999 gap lives in the tail, after 97 % of the swarm is already dead.
 - `ToD=None` means the run was **censored**; `run_monte_carlo_table.py:29-33` then substitutes `surv = config.max_time`. "Mean Swarm Survival 1999 ± 2 ticks" is the statement *"3 of 100 drones sat still until the simulation clock ran out"*, with `±2` reflecting nothing but the logging interval.
 
-### F-10 — The consensus subsystem has no causal effect on any reported metric **[VERIFIED]**
+### F-10 — ~~The consensus subsystem has no causal effect on any reported metric~~ **[CORRECTED 2026-08-16 — the original explanation below is WRONG]**
+
+> **CORRECTION.** The finding that the bisection has no measurable effect (F-02's bit-identity) stands, but the causal explanation given below does not. Instrumenting `RegimeClassifier.classify` over 10,221 classifications (3 seeds) shows the variance-dependent branches are reached **25.80 % of the time** (`LATENCY_OSCILLATION` 23.68 %, variance-`MARGINAL` 2.12 %) — `FRAGMENTED` does *not* always fire first, and consensus is **not** causally inert.
+>
+> The real mechanism is a **duplicated bound**: the projector genuinely moves `gossip_epsilon` (mean 0.0159 with bisection ON vs 0.0430 with it OFF), but `gossip_consensus.py:69` independently recomputes `safe_bound = 0.99/(d_i(τ_max+1))` and clamps on **98.5 % of calls**, so the epsilon actually applied is identical to three significant figures in both arms (0.003897 vs 0.003901). Algorithm 1's dynamic bound is overwritten downstream by a second implementation of itself — and the two disagree on τ discretisation (`ceil` vs `int`, F-24). The bisection is **redundant**, not unreachable.
+>
+> Resolution: option (b) of `fixes_phases.md` §2.1 — the internal clamp is removed and the projector made the sole enforcement point. Full evidence there.
+
+### F-10 (original text, superseded) — The consensus subsystem has no causal effect on any reported metric **[VERIFIED]**
 
 Probe 6:
 

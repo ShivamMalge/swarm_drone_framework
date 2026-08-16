@@ -14,6 +14,7 @@ All inter-agent communication flows through the event queue.
 
 from __future__ import annotations
 
+import math
 from collections import deque
 from dataclasses import dataclass, field
 
@@ -507,13 +508,19 @@ class AgentCore:
         interpolates current agent bounds toward the required targets.
         """
         if self._theta_safe_enabled:
-            # Phase 4: Dynamic Spectral Verification Bounds
+            # Phase 4: Dynamic Spectral Verification Bounds.
+            # This is now the SOLE enforcement point for the delay-tolerant
+            # epsilon bound: compute_gossip_update applies epsilon verbatim
+            # (see gossip_consensus.py module docstring; audit F-10 correction).
             neighbors = self._local_map.get_all_neighbors()
             d_i = len(neighbors)
             if d_i > 0:
-                # dt is 1.0, so max continuous delay is roughly tau_max
+                # tau discretised with ceil, the conservative reading: any
+                # fractional delay costs a full discrete step of staleness.
+                # The previous floor here disagreed with the (now removed)
+                # duplicate bound in gossip_consensus, which used ceil — F-24.
                 max_delay = max([current_time - nb.timestamp for nb in neighbors])
-                tau_max = max(0, int(max_delay))
+                tau_max = max(0, math.ceil(max_delay))
                 safe_bound = 0.99 / (d_i * (tau_max + 1))
             else:
                 safe_bound = 1.0 # arbitrary safe bound if isolated

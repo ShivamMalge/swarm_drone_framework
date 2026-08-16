@@ -42,20 +42,43 @@ def compute_information_staleness(local_map: LocalMap, current_time: float) -> f
     return statistics.mean(ages)
 
 
+# Saturation ceiling for the variance proxy. The regime classifier only ever
+# THRESHOLDS this value (variance_high ~ 1.5), so beyond the largest threshold
+# its magnitude carries no decision information; the cap exists purely so a
+# divergent consensus reads as "maximal variance" instead of overflowing.
+VARIANCE_PROXY_CEILING = 1e12
+
+
 def compute_local_consensus_variance(agent: AgentCore) -> float:
     """
     Return the variance of consensus states among the local neighborhood + self.
     A surrogate metric for tracking system-wide consensus convergence (λ₂).
+
+    Saturating: divergent consensus states (possible in the unconstrained
+    baseline, where no stability bound protects epsilon) are reported as
+    VARIANCE_PROXY_CEILING rather than crashing the monitor. The previous
+    implementation used ``statistics.variance``, whose exact-fraction
+    arithmetic raises OverflowError once states pass ~1e154 -- the divergence
+    is real baseline behaviour and must stay observable; the observer dying
+    on it is the defect.
     """
+    import numpy as np
+
     neighbors = agent.local_map.get_all_neighbors()
     if not neighbors:
         return 0.0  # Zero variance if alone
-        
+
     states = [agent.consensus_state] + [n.consensus_state for n in neighbors]
     if len(states) < 2:
         return 0.0
-        
-    return statistics.variance(states)
+
+    with np.errstate(over="ignore", invalid="ignore"):
+        # ddof=1: sample variance, matching the statistics.variance convention.
+        var = float(np.var(np.asarray(states, dtype=np.float64), ddof=1))
+
+    if not np.isfinite(var):
+        return VARIANCE_PROXY_CEILING
+    return min(var, VARIANCE_PROXY_CEILING)
 
 def compute_distributed_spectral_proxy(
     current_variance: float, 
