@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Local scratch / investigation scripts
+scratch_*.py
+
+# Test and run artifacts
+outputs/_test_replay/
+
+# Installers and other local binaries that do not belong in the repo
+*.exe

@@ -79,6 +79,7 @@ class AgentCore:
         tuning_alpha: float = 0.15,
         theta_safe_enabled: bool = True,
         test_mode: str | None = None,
+        global_info_enabled: bool = False,
     ) -> None:
         self.agent_id = agent_id
         self._position: np.ndarray = position.copy()
@@ -142,6 +143,10 @@ class AgentCore:
         self.max_parameter_shift: float = 0.0
         self._theta_safe_enabled = theta_safe_enabled
         self.test_mode = test_mode
+        self.global_info_enabled = global_info_enabled
+        self.oracle_centroid: np.ndarray | None = None
+        self.total_ticks: int = 0
+        self.coverage_ticks: int = 0
         
         # Phase 5: Distributed Spectral Estimation Tracking
         self._prev_variance = 0.0
@@ -185,6 +190,10 @@ class AgentCore:
         if not self.is_alive:
             return np.zeros(2)
 
+        self.total_ticks += 1
+        if self.global_info_enabled or self.coverage_gain > 0.05:
+            self.coverage_ticks += 1
+
         if self.active_task_pos is not None:
             # Patch 2: Prioritize moving toward active task if won auction
             direction = self.active_task_pos - self._position
@@ -192,6 +201,17 @@ class AgentCore:
             if dist > 0.1:
                 velocity = (direction / dist) * self._v_max * self.velocity_scale
                 return velocity
+
+        if self.global_info_enabled and self.oracle_centroid is not None:
+            # True Global Oracle Voronoi override
+            direction = self.oracle_centroid - self._position
+            k_gain = 0.5 * self.coverage_gain
+            velocity = k_gain * direction
+            speed = float(np.linalg.norm(velocity))
+            max_spd = self._v_max * self.velocity_scale
+            if speed > max_spd:
+                velocity = (velocity / speed) * max_spd
+            return velocity
 
         if self.coverage_gain > 0.05:
             from src.coordination.voronoi_coverage import compute_local_centroid
