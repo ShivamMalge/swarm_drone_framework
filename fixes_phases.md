@@ -711,6 +711,30 @@ Both measured exponents (pre-fix N^1.52, post-fix N^1.04) are unsound: the swarm
 
 **`[MS-22]` §V-A** — delete "stochastic Gaussian attenuation"; ψ is `FieldMode.CONSTANT`.
 
+**`[MS-30]` §V-B / Figure 2 — NEW FINDING (F-39): the jamming ramp runs to 255 % and saturates at total blackout 38 % of the way through the run.**
+
+Surfaced while isolating the ENV_UPDATE change. `run_percolation.py` starts at `psi_max = 0.05` and `_handle_env_update` adds `0.005 × 1.0 × 5 = 0.025` every 5 ticks for 500 ticks:
+
+```
+PERCOLATION JAMMING RAMP -- saturation analysis
+  psi starts at 0.05, +0.025 every 5 ticks
+  psi crosses 1.0 (total blackout) at t=191 of a 500-tick run
+  final psi = 2.550  (i.e. 255% jamming)
+  => 62% of the run is past total blackout
+
+packet_drop.py: p_survive = (1-p_drop)*(1-psi)*path_loss
+  at psi>1 the (1-psi) factor is NEGATIVE, so p_survive<0 and every
+  packet drops. There is no clamp on psi_max, and InterferenceField
+  documents psi in [0, psi_max] while psi_max itself is ramped past 1.
+```
+
+Consequences:
+- §V-B says *"as environmental jamming increases to 100 %"*. It increases to **255 %**, reaching 100 % at t≈191.
+- **The last 62 % of Figure 2's x-axis is not a jamming gradient**; it is a flat total-blackout regime in which no packet can ever be delivered. Any structure the reader infers from that region is post-extinction geometry, not a response to increasing interference.
+- `InterferenceField` documents `ψ ∈ [0, ψ_max]` (`interference_field.py:63-66`) while `ψ_max` itself is ramped past 1.0 unclamped, and `PacketDropSampler` has no guard for `ψ > 1` — `p_survive` simply goes negative.
+
+**Code fix:** clamp ψ to `[0, 1]` in `InterferenceField.evaluate`, or stop the ramp at 1.0. **Manuscript fix:** either truncate Figure 2 at t≈191 and state that the sweep covers 0-100 % jamming, or keep the full run and state explicitly that the network is fully jammed after t≈191.
+
 **`[MS-28]` Introduction, line 60** — *"Without mathematical bounds, unconstrained adaptation often induces kinematic oscillations and network fracturing."* Not blocking (it is literature framing, not a measured claim about this system), but it motivates a failure mode we have now measured this system **not** to exhibit: all supervisor proposals are bounded constants in [0,2] and the unconstrained arm's trace is flat, not oscillatory (F-04, §V-D). Leaving it unqualified sets an expectation §V no longer meets. Either attribute it explicitly to prior work, or add a sentence noting that our unconstrained baseline degrades through a different mechanism.
 
 **Verify (code-side, for the ones you implement):** unit test each corrected equation against a hand-computed value.
