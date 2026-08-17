@@ -1077,6 +1077,29 @@ vs adopted: t50 98→127/128 in **both** arms (+30 %, contrast unchanged — sti
 
 Tests: 15 failed / 95 passed — identical pre-existing set, no regressions.
 
+### 3.1 adoption (author decision, 2026-08-17) — ✅ manuscript updated
+
+**Adopted:** t50 127/128, decay 0.2606/0.0499, 50/50 censored, 5.2×.
+
+**Sanity check demanded before the table — Proposed decay ±0.0000 at 4 d.p. is GENUINE, not truncation:**
+```
+50 distinct values (50/50 unique), full precision:
+mean   = 0.049881429552
+std    = 9.895e-05      ci95 = 2.743e-05
+min    = 0.0495781021   max = 0.0499984460   spread = 4.203e-04
+```
+Structural explanation (now in the Table III caption): every run censors at the same 2000-tick horizon with near-total energy expenditure, so decay = (E₀ − E_res)/(N·T) is pinned by construction; residual variance comes only from 1–5 surviving agents' leftover energy.
+
+**Manuscript edits made:**
+- Table III adopted + caption states (a) the t50-absolute vs contrast caveat, (b) the genuine-zero-variance explanation.
+- §III-D added: the full max_age derivation (measured live/dead distributions, p99 choice, staleness-trigger constraint, sensitivity) — a reviewer can now see where 30 came from.
+- §V-A F-04 rewritten as **two regimes separated by belief eviction**: phantom-centroid asymptotic convergence (0–47 % halted, 0 % empty maps, one survivor never halting) vs exact fixed point (100 %/100 %), with the on-thesis reading stated: *belief staleness policy shapes emergent coordination*.
+- §V-C: pursuit–halt tension kept as a mechanism finding; the fatal 6 % tail retired **explicitly** with the observe → trace → identify-as-phantom-artifact → fix → re-measure sequence, and the expectation that the tension binds again in longer missions / denser tasks / lower budgets.
+- §V-D: MS-14 note now records the re-verification under recovered τ_max (ε 0.016→0.018, decay flat to 4 d.p.): "the negligible-energy conclusion survives the recovery of its own input."
+- Abstract numbers updated (5.2×, 128 vs 127).
+- **MS-17/18/19 done** (§IV equations): Eq. (1) replaced with the real three-factor survival model (+ the two easy-to-misread properties: not inverse-square; zero delivery at nominal radius, measured 0.64 drop at nominal 0.2); Eq. (2) guard direction corrected (returns MAXIMAL proxy — fog-of-war ambiguity resolved optimistically), §V-B's "fragmentation alarm" phrasing reconciled (signal is inverted: high proxy + low density); Eq. (3) rewritten with normalised power s_tx² and the 4×-vs-400× note.
+- **MS-24 done in passing** (it sat in the §V-D paragraph being edited): the "±0.3 oscillations" claim withdrawn in-text — no such oscillation in measured traces, no implementing mechanism.
+
 ### 3.2 — Fix `coverage_completion_rate` or delete it `[F-18]`
 
 `agent_core.py:194` counts ticks where the controller was nominally enabled — it reports 92 % for a random-walk arm and 100 % unconditionally in oracle mode. Either implement a real coverage measure (fraction of the grid within `comm_radius` of some live agent, sampled on the metrics tick) or delete the metric. Do not report the current one.
