@@ -79,6 +79,25 @@ class LocalMap:
         """Remove a neighbor (e.g., on confirmed death)."""
         self._beliefs.pop(agent_id, None)
 
+    def evict_stale_neighbors(self, current_time: float, max_age: float) -> int:
+        """
+        Drop beliefs whose last refresh is older than *max_age*.
+
+        Returns the number of beliefs evicted. Without eviction a belief
+        persisted forever once formed -- including beliefs about dead agents,
+        which froze at their final position and kept feeding every consumer:
+        neighbour density counted phantoms, staleness grew without bound
+        (inflating tau_max and collapsing the epsilon bound), and the coverage
+        centroid steered agents relative to corpses (audit F-12).
+        """
+        stale = [
+            aid for aid, nb in self._beliefs.items()
+            if current_time - nb.timestamp > max_age
+        ]
+        for aid in stale:
+            del self._beliefs[aid]
+        return len(stale)
+
     @property
     def neighbor_count(self) -> int:
         """Number of known neighbors."""

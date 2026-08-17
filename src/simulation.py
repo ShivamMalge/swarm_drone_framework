@@ -77,6 +77,7 @@ class Phase1Simulation:
                 tuning_alpha=config.tuning_alpha,
                 p_move=config.p_move,
                 auction_timeout=config.auction_timeout,
+                belief_max_age=config.belief_max_age,
             )
             
             # Experiment 2: Thermodynamics - Randomized low initial energy

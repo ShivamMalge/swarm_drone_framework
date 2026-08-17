@@ -118,6 +118,18 @@ class SimConfig:
     # Phase 4B: Control Tuning
     tuning_alpha: float = 0.15
 
+    # Phase 3.1: LocalMap belief eviction (audit F-12).
+    # Beliefs unrefreshed for longer than this are dropped. Chosen from the
+    # measured inter-refresh distribution of beliefs about LIVING neighbours
+    # (seed 1000, N=100, 2000 ticks, n=28,620 refreshes): p50=2, p90=7,
+    # p99=31, p99.9=76 ticks -- versus DEAD-sender belief ages of median 263,
+    # p90=1513. 30.0 sits at the p99 of live-link cadence (~1% spurious
+    # eviction risk) while removing phantoms two orders of magnitude sooner
+    # than they previously persisted; it also exceeds the FRAGMENTED staleness
+    # trigger (3 * staleness_high = 9.0), so staleness-based regime detection
+    # still sees ages 9-30 before eviction removes the evidence.
+    belief_max_age: float = 30.0
+
     # Phase 2D: Regime Detection
     regime: RegimeConfig = field(default_factory=RegimeConfig)
 

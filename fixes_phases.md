@@ -1025,9 +1025,57 @@ def evict_stale(self, current_time: float, max_age: float) -> int:
 This is a **behaviour-changing** fix: it will raise `FRAGMENTED` detection rates, shrink `τ_max`, and therefore raise `gossip_epsilon` off its current 2.9e-05 floor. It may change Table III. Re-run Phase 1 verification afterwards.
 
 **Verify:** print `max(current_time - nb.timestamp for nb in agent._local_map.get_all_neighbors())` at end of run. Currently unbounded (implied τ_max ≈ 2800); must be ≤ `max_age`. Also print the resulting mean `gossip_epsilon`.
-**Evidence:** _(paste output)_
 
-**`[MS-26]`** If `gossip_epsilon` recovers, §IV's ε-bound discussion and possibly `[MS-14]`'s conclusion change. Re-check both.
+**Evidence:** ✅ code DONE; ⚠️ **manuscript BLOCKED — Table III moved again, and two prior findings change character. Flagged below, nothing edited.**
+
+**max_age chosen from measurement, not a round number.** Empirical distributions (seed 1000, N=100, 2000 ticks):
+```
+inter-refresh gaps, LIVE-neighbour beliefs (n=28,620): p50=2  p90=7  p95=10  p99=31  p99.9=76  max=118
+sampled belief ages, DEAD senders (n=23,175):          p50=263  p90=1513  p99=1839  max=1925
+```
+The populations are separable by two orders of magnitude. **`belief_max_age = 30.0` = p99 of live-link cadence** (~1 % spurious-eviction risk), and above the FRAGMENTED staleness trigger (3×3.0 = 9.0) so staleness-based detection still sees its evidence. Derivation recorded in `SimConfig`.
+
+**Sensitivity (15 ≈ p95 / 30 / 60 ≈ p99.9, 10 seeds × both arms):**
+```
+arm             max_age              decay              t50  censored
+Proposed             15     0.0499+/-0.0000      162+/-20        10/10
+Proposed             30     0.0499+/-0.0001      128+/-15        10/10
+Proposed             60     0.0499+/-0.0000       97+/-5         10/10
+Unconstrained        15     0.2413+/-0.0279      158+/-20         0/10
+Unconstrained        30     0.2489+/-0.0505      128+/-16         0/10
+Unconstrained        60     0.2371+/-0.0381       97+/-5          0/10
+```
+**Decay is insensitive to max_age. t50's absolute value is NOT (97→162 across the range) — but it shifts identically in both arms at every value, so the Proposed-vs-Unconstrained contrast (no differential delay) is robust to the choice.** Consequence for the paper: t50 absolutes are partly a property of the monitoring configuration and should not be over-read; the contrast is the claim.
+
+**The four F-12 predictions, measured individually (A/B, eviction OFF = max_age 1e18 vs ON = 30, seeds 1000-1002):**
+
+| prediction | OFF | ON |
+|---|---|---|
+| 1. max belief age bounded | 1925–1961 | **30.00 exactly** (after moving eviction ahead of the broadcast-thinning check — it first measured 35–37 because `broadcast_rate=0.5` strategies skipped half the eviction opportunities; placement fixed and re-verified) |
+| 2. applied ε | 0.0138–0.0169 | **0.0168–0.0183** (~+20 %; the 2.9e-05 floor was already gone via MS-14 — this is the phantom-τ recovery on top) |
+| 3. FRAGMENTED onset | mean t≈54–57, 100/100 agents | **t≈79–112, 92–100/100** — later, and via the density trigger. Pre-eviction detection was *early for the wrong reason*: phantom beliefs inflated `mean_staleness` past the 3× trigger. Detection now tracks actual isolation |
+| 4. phantoms in coverage inputs | 50–58 % of believed neighbours dead | **16–21 %** — bounded (corpses linger ≤ max_age), not zero |
+
+**F-04 re-measurement (author-flagged as headline-sensitive):**
+```
+late-phase (t>500) survivors:      OFF: halted 0-47%, empty maps 0%
+                                   ON:  halted 100%,  empty maps 100%
+```
+⚠️ **F-04's §V-A characterisation was mechanically inaccurate for the pre-eviction system it was written about.** Pre-eviction, no late-phase map was ever empty; survivors converged *asymptotically toward frozen phantom centroids* (v → 0 exponentially, sometimes never below 1e-9 in-run — seed 1002's survivor never halted). Post-eviction, the prose ("belief buffer holds no live neighbours … commanded velocity identically zero") is **literally true**: 100 % empty maps, 100 % exact halts. The fixed point triggers *more cleanly and universally*, not more often in a new regime. §V-A needs a flag-level edit acknowledging both mechanisms, not a quiet word-swap.
+
+**Full 50-seed suite (max_age=30) — ⚠️ TABLE III MOVED:**
+```
+[Unconstrained]  t50 127 +/- 5   decay 0.2606 +/- 0.0173   survival 407 +/- 29  (0/50 censored)
+[Proposed]       t50 128 +/- 5   decay 0.0499 +/- 0.0000   50/50 censored
+[True Oracle]    identical (no gossip path)
+```
+vs adopted: t50 98→127/128 in **both** arms (+30 %, contrast unchanged — still no differential delay); Unconstrained decay 0.289→0.261 (~1.3 CI); Proposed decay 0.051→0.0499 with **variance collapsing to ±0.0000**; ratio would become 5.2× (was 5.6×, was 4.5×).
+
+⚠️ **The §V-C pursuit–halt tail finding (3/50 = 6 % total loss) DOES NOT REPRODUCE under eviction: 50/50 censored, zero total-loss runs.** The tension is real but its fatal manifestation was a property of the phantom-map configuration (phantom-fed centroids kept remnants creeping while pursuers drained them). §V-C's finding paragraph, the abstract's numbers, `tab:oracle_sensitivity`, and §V-D's "mean applied step size 0.016" (now ~0.018) all need coordinated edits **after review** — none made.
+
+**MS-14 revisit (author-flagged):** with τ_max no longer phantom-inflated, mean applied ε rises only 0.016→~0.018 (≈⅓ of the 0.05 cap) and decay is bit-flat at 0.0499. **The "real consensus-layer property, negligible energy contribution" conclusion stands under recovered ε.**
+
+Tests: 15 failed / 95 passed — identical pre-existing set, no regressions.
 
 ### 3.2 — Fix `coverage_completion_rate` or delete it `[F-18]`
 

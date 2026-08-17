@@ -83,6 +83,7 @@ class AgentCore:
         global_info_enabled: bool = False,
         p_move: float = 0.1,
         auction_timeout: float = 5.0,
+        belief_max_age: float = 30.0,
     ) -> None:
         self.agent_id = agent_id
         self._position: np.ndarray = position.copy()
@@ -130,6 +131,8 @@ class AgentCore:
         # locomotion cost model, and the protocol's resolution window.
         self._p_move = p_move
         self._auction_timeout = auction_timeout
+        # Belief eviction horizon; see SimConfig.belief_max_age for derivation.
+        self._belief_max_age = belief_max_age
         # Round-robin cursor over live auctions for gossip (see prepare_broadcast).
         self._gossip_rotation = 0
 
@@ -305,6 +308,15 @@ class AgentCore:
 
     def prepare_broadcast(self, current_time: float) -> AgentMessage | None:
         """Create an outgoing message with current state snapshot."""
+        # Belief/auction eviction is bookkeeping, not transmission: it must run
+        # every broadcast tick, BEFORE the thinning checks below, or a silenced
+        # agent stops evicting and the age bound quietly loosens (measured: max
+        # belief age drifted to 35-37 with max_age=30 when this sat after the
+        # rate check, because broadcast_rate=0.5 strategies skipped half the
+        # eviction opportunities).
+        self._local_map.evict_stale_neighbors(current_time, self._belief_max_age)
+        self._local_map.expire_auctions(current_time, self._auction_timeout)
+
         if self.broadcast_rate <= 0.05:
             # Structurally deactivated
             return None
@@ -327,7 +339,6 @@ class AgentCore:
         #   monopolises the younger's entire bidding window.)
         # Round-robin is deterministic, needs no RNG, and cannot starve.
         auction_bid = None
-        self._local_map.expire_auctions(current_time, self._auction_timeout)
         if self._local_map.active_auctions:
             live = sorted(self._local_map.active_auctions)
             task_id = live[self._gossip_rotation % len(live)]
