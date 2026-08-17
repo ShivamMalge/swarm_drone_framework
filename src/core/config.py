@@ -22,11 +22,13 @@ import numpy as np
 class RegimeConfig:
     """
     Tunable thresholds for regime detection (Passive Detection Layer).
-    
-    Includes theoretical guarantees for Hybrid Automata:
-    - dwell_time: Enforces a strict minimum time (tau_d) between regime switches.
-      Based on Switched Systems theory (e.g., Liberzon), this prevents Zeno behavior 
-      and guarantees that transient instability decays before the next switch.
+
+    - dwell_time is the POLLING PERIOD of regime re-evaluation (the interval at
+      which REGIME_UPDATE events are rescheduled), not a minimum-dwell
+      constraint: nothing forbids a regime change on consecutive evaluations.
+      A previous version of this docstring claimed Liberzon-style dwell-time
+      enforcement with Zeno-prevention guarantees; no such enforcement exists
+      anywhere in the implementation (audit MS-21).
     """
     window_size: int = 10
     dwell_time: float = 5.0
@@ -85,7 +87,6 @@ class SimConfig:
     
     # Phase 1: Dynamic Transmission Power
     comm_radius_base: float = 20.0
-    comm_radius_max: float = 40.0
     comm_radius: float = 20.0 # Keeping for backward compatibility temporarily
     
     # Phase 1: Temporal Anchor (1 tick = 0.1 physical seconds, 10Hz control loop)

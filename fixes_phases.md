@@ -1105,7 +1105,15 @@ Structural explanation (now in the Table III caption): every run censors at the 
 `agent_core.py:194` counts ticks where the controller was nominally enabled — it reports 92 % for a random-walk arm and 100 % unconditionally in oracle mode. Either implement a real coverage measure (fraction of the grid within `comm_radius` of some live agent, sampled on the metrics tick) or delete the metric. Do not report the current one.
 
 **Verify:** with `coverage_enabled=False`, the metric must read `0.0`. It currently reads >90 %.
-**Evidence:** _(paste output)_
+
+**Evidence:** ✅ DONE — the fake metric is deleted outright (counters, summary key, runner columns) and replaced with a REAL measure: fraction of a fixed 25x25 arena lattice within `comm_radius` of at least one LIVING agent, sampled at metrics ticks, observer-side. 0.0 for an extinct swarm by construction.
+```
+3.2 VERIFY -- the new metric must reflect reality, not controller enablement
+  Proposed       area_coverage_mean=50.06%  alive_end=5
+  Unconstrained  area_coverage_mean=38.31%  alive_end=0
+  (fake metric read 100% / 92% for these two arms; a dead swarm now reads 0 by construction)
+```
+`grep -rn coverage_completion_rate src/ experiments/ tests/` → one hit, the explanatory comment. The number is unreachable by any script that prints into a table.
 
 ### 3.3 — Stop the multiprocess log race `[F-26]`
 
@@ -1139,6 +1147,8 @@ ls: cannot access 'logs/experiment_static_bounded.csv': No such file or director
 - `src/communication/rgg_builder.py` — used only by tests; either wire into `CommunicationEngine` (see `[MS-20]`) or mark clearly as unused.
 - `src/agent/agent_core.py:238-243` — annotate the random-walk branch as the *baseline fallback controller*, since Table III's result depends on it (F-04).
 
+**Evidence:** ✅ DONE — `comm_radius_max` deleted; `AUCTION_TIMEOUT` deleted with a numbering-stability note (the enum gap is kept so event priorities are unchanged); the random-walk branch now carries a BASELINE FALLBACK CONTROLLER annotation naming it as the baseline's burn mechanism and warning that changing it changes the headline result; `RGGBuilder` was wired into `CommunicationEngine` at MS-20. Also fixed in passing: `RegimeConfig`'s docstring still claimed Liberzon-style dwell-time enforcement with Zeno-prevention guarantees — replaced with the honest polling-interval statement (code-side counterpart of MS-21). Imports verified; behaviour-invariance bit-checked (see 4.1 evidence).
+
 ---
 
 ## Phase 4 — Repair the test suite and the broken subsystems
@@ -1156,7 +1166,25 @@ Current: `19 failed, 87 passed`, plus 23 files uncollectable (`ModuleNotFoundErr
 5. `tests/test_regime_detection.py` (5), `test_hybrid_supervisor.py` (2), `test_auction.py::test_dropout_robustness`, `test_scalability_n100.py::test_drop_rate_within_tolerance` (measured 0.642 vs expected ≤0.55 — this one is reporting a *real* discrepancy; fix the model or the tolerance, deliberately).
 
 **Verify:** `python -m pytest tests/ -q` → `0 failed`, `0 errors`.
-**Evidence:** _(paste the summary line)_
+
+**Evidence:** ✅ DONE (non-GUI scope; GUI-import files still need PySide6 installed, Phase 4.5)
+```
+114 passed in 168.58s (0:02:48)
+```
+**First fully green run in the project's history** (was 19 failed at audit time, 15 after interim fixes). What each repair was, honestly categorised:
+
+- **Stale-signature repairs** (tests dead on TypeError, no judgement involved): `test_safety_projector` (4, fixed earlier + 4 new two-stage contract tests), `test_hybrid_supervisor` (2 — old boolean-toggle API `_coverage_active`/`_auction_enabled` replaced by EMA-convergence assertions against the continuous θ pipeline), `test_regime_detection` signature (`classification_interval` → `dwell_time`), `test_replay` (`agent_states`).
+- **Fixture rot from the quadratic transmission-power model** (`cost ∝ (R/20)²` post-dates these tests): regime `stable`/`cascade` fixtures used `comm_radius=150` = 2.8 energy/recipient/tick — 19 of 20 agents dead by t=15, the survivor classifying MARGINAL on beliefs about corpses; auction `dropout` fixture used R=100 = 1.25/recipient — 18/20 dead, zero auction results *because the bidders were dead*. Redesigned with compact arenas + `energy_initial=500`, each with the arithmetic in a comment.
+- **Deliberate contract changes, pinned not papered over**: `test_packet_drop` rewritten to the three-factor survival model, including a new test asserting `p_drop=0` is *not* a delivery guarantee and delivery probability is exactly zero at the nominal radius (the manuscript states this). `test_scalability` drop band replaced with an analytic derivation ([0.55, 0.80] from E[path_loss]; the old [0.15, 0.55] predates path loss and no configuration of the current model can satisfy it).
+- **False-positive repair + real check added**: `test_no_global_access` no longer greps bare `lambda_2` (matched the agent's own *local* estimator for months); added `test_oracle_channel_closed_when_disabled` — a **runtime** assertion that `oracle_centroid` stays `None` when the flag is off, guarding the exact silent-propagation failure from the project's history.
+
+**Behaviour-invariance of the day's cleanup verified bit-exactly** against the correct baseline (the post-placement-fix decay-precision run):
+```
+decay now                = 0.0495781021
+pre-cleanup reference    = 0.0495781021  (seed 1000)
+bit-match: True
+```
+(A first comparison against t50=183 mismatched at 188 — that reference was the *pre*-placement-fix A/B, i.e. the wrong baseline; the definitive Table III suite already includes the placement fix.)
 
 ### 4.2 — Replace `diagnostics_audit.py`'s vacuous checks `[F-16]`
 
@@ -1184,7 +1212,12 @@ frames = ReplayLoader('outputs/run_.../').load()
 print(len(frames), frames[0].adjacency.sum(), SpectralAnalyzer().analyze_frame(frames[0]).lambda2)
 ```
 Must load without error and produce a λ₂ matching `frames[0].spectral_gap`. Today it raises `TypeError`.
-**Evidence:** _(paste output)_
+
+**Evidence:** ✅ items 1-2 DONE — `agent_states` persisted by the exporter in all three formats (`state_{i}` columns / JSON list) and read back by all three loader paths with a zeros fallback. The zero-adjacency/full-components contradiction (F-31) is fixed by **exact reconstruction**: the emitter's adjacency IS the geometric graph (KDTree pairs at `comm_radius` over true positions), so the loader rebuilds it bit-identically from persisted positions + the metadata config's `comm_radius`, and recomputes components with the same BFS. `TelemetryFrame.empty()` fail-dead default fixed (F-33: `np.ones` → `np.zeros`).
+```
+tests/test_replay.py  1 passed in 4.31s
+```
+Items 3-4 (exporter's silent 10k-frame truncation; `regime` popped from config_snapshot) remain open — tracked for the 4.5 pass.
 
 ### 4.4 — Fix scenarios `[F-35, F-36]`
 

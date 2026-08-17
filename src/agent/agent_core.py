@@ -158,8 +158,6 @@ class AgentCore:
         self.test_mode = test_mode
         self.global_info_enabled = global_info_enabled
         self.oracle_centroid: np.ndarray | None = None
-        self.total_ticks: int = 0
-        self.coverage_ticks: int = 0
         # Last commanded velocity, cached by the KINEMATIC_UPDATE handler so the
         # metrics layer can observe it without re-running compute_velocity().
         self.last_velocity: np.ndarray = np.zeros(2)
@@ -247,7 +245,13 @@ class AgentCore:
                 velocity = (velocity / speed) * max_spd
             return velocity
         else:
-            # Simple random walk placeholder (deterministic backbone)
+            # BASELINE FALLBACK CONTROLLER -- an undirected random walk.
+            # This branch is what the "Unconstrained" arm runs once its
+            # coverage_gain passes through 0 unclamped, and it is the burn
+            # mechanism behind the baseline's energy decay (audit F-04).
+            # It is a placeholder, and Table III's caption reads the
+            # Unconstrained row as a lower bound on baseline behaviour
+            # accordingly. Changing this branch changes the headline result.
             direction = self._rng.standard_normal(2)
             norm = np.linalg.norm(direction)
             if norm > 0:

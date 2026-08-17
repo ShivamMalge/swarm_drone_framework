@@ -61,18 +61,50 @@ class TestNoGlobalAccess:
         with open(path, "r", encoding="utf-8") as f:
             source = f.read()
 
+        # "lambda_2" was previously on this list and matched the agent's own
+        # LOCAL estimator attribute (_lambda_2_proxy), failing the test for
+        # months on a false positive. The patterns below name specifically
+        # GLOBAL quantities an agent must never reference.
         forbidden_patterns = [
             "global_adjacency",
             "adjacency_matrix",
             "agent_list",
             "all_agents",
-            "lambda_2",
+            "true_lambda_2",
+            "global_lambda_2",
+            "spectral_gap",
             "algebraic_connectivity",
             "SimulationKernel",
+            "connectivity_metrics",
         ]
         for pattern in forbidden_patterns:
             assert pattern not in source, (
                 f"AgentCore source contains forbidden reference: '{pattern}'"
+            )
+
+    def test_oracle_channel_closed_when_disabled(self):
+        """
+        The one REAL global-information channel into AgentCore is
+        oracle_centroid, which the orchestrator computes from true global
+        positions and writes onto the agent in oracle mode. When
+        global_info_enabled is False that channel must stay shut for the whole
+        run -- this is a runtime check, not a source grep, because this exact
+        flag once silently failed to propagate (audit 0.5 history).
+        """
+        import numpy as np
+        from src.core.config import SimConfig
+        from src.simulation import Phase1Simulation
+
+        sim = Phase1Simulation(SimConfig(
+            num_agents=20, max_time=30.0, seed=42,
+            coverage_enabled=True, global_info_enabled=False,
+        ))
+        sim.run()
+        for agent in sim.agents:
+            assert agent.global_info_enabled is False
+            assert agent.oracle_centroid is None, (
+                f"Agent {agent.agent_id} received an oracle centroid with "
+                "global_info_enabled=False: global information leaked."
             )
 
     def test_agent_does_not_store_other_agents(self):

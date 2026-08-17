@@ -15,7 +15,46 @@ from typing import Any
 
 import numpy as np
 
+import numpy as _np
+from scipy.spatial import KDTree
+
 from src.telemetry.telemetry_frame import TelemetryFrame
+
+
+def _reconstruct_graph(positions, comm_radius):
+    """
+    Rebuild the adjacency matrix and connected components from positions.
+
+    Exact, not approximate: the emitter's adjacency IS the geometric graph
+    (KDTree pairs at comm_radius over true positions), so given the same
+    positions and radius the reconstruction is bit-identical. Loader paths
+    previously fabricated adjacency = zeros alongside connected_components =
+    [all agents] -- two mutually contradictory fictions that made every
+    replayed run report total network collapse (audit F-31).
+    """
+    n = len(positions)
+    adjacency = _np.zeros((n, n), dtype=_np.uint8)
+    if n > 1 and comm_radius is not None and comm_radius > 0:
+        tree = KDTree(positions)
+        for u, v in tree.query_pairs(comm_radius):
+            adjacency[u, v] = 1
+            adjacency[v, u] = 1
+    visited = [False] * n
+    components = []
+    for start in range(n):
+        if visited[start]:
+            continue
+        comp, stack = [], [start]
+        visited[start] = True
+        while stack:
+            node = stack.pop()
+            comp.append(node)
+            for nb in _np.nonzero(adjacency[node])[0]:
+                if not visited[nb]:
+                    visited[nb] = True
+                    stack.append(int(nb))
+        components.append(comp)
+    return adjacency, components
 
 try:
     import pyarrow.parquet as pq
@@ -63,6 +102,11 @@ class ReplayLoader:
     @property
     def frames(self) -> list[TelemetryFrame]:
         return self._frames
+
+    def _comm_radius(self):
+        """Communication radius from the exported config, if present."""
+        r = self.metadata.config_snapshot.get("comm_radius")
+        return float(r) if r is not None else None
 
     # ── Metadata ─────────────────────────────────────────────
 
@@ -114,12 +158,16 @@ class ReplayLoader:
             data = json.load(f)
         for entry in data:
             n = len(entry["positions"])
+            positions = np.array(entry["positions"], dtype=np.float64)
+            adjacency, components = _reconstruct_graph(
+                positions, self._comm_radius()
+            )
             frame = TelemetryFrame(
                 time=entry["time"],
-                positions=np.array(entry["positions"], dtype=np.float64),
+                positions=positions,
                 energies=np.array(entry["energies"], dtype=np.float64),
-                adjacency=np.zeros((n, n), dtype=np.uint8),  # not stored in JSON
-                connected_components=entry.get("connected_components", [list(range(n))]),
+                adjacency=adjacency,
+                connected_components=entry.get("connected_components", components),
                 spectral_gap=entry["spectral_gap"],
                 consensus_variance=entry["consensus_variance"],
                 packet_drop_rate=entry["packet_drop_rate"],
@@ -130,6 +178,9 @@ class ReplayLoader:
                     for k, v in entry.get("adaptive_parameters", {}).items()
                 },
                 drone_failure_flags=np.array(entry["drone_failure_flags"], dtype=bool),
+                agent_states=np.array(
+                    entry.get("agent_states", [0.0] * len(positions)), dtype=np.float64
+                ),
             )
             self._frames.append(frame)
 
@@ -150,12 +201,15 @@ class ReplayLoader:
                 )
                 regime = {i: row.get(f"regime_{i}", "UNKNOWN") for i in range(n)}
 
+                adjacency, components = _reconstruct_graph(
+                    positions, self._comm_radius()
+                )
                 frame = TelemetryFrame(
                     time=float(row["time"]),
                     positions=positions,
                     energies=energies,
-                    adjacency=np.zeros((n, n), dtype=np.uint8),
-                    connected_components=[list(range(n))],
+                    adjacency=adjacency,
+                    connected_components=components,
                     spectral_gap=float(row["spectral_gap"]),
                     consensus_variance=float(row["consensus_variance"]),
                     packet_drop_rate=float(row["packet_drop_rate"]),
@@ -163,6 +217,10 @@ class ReplayLoader:
                     regime_state=regime,
                     adaptive_parameters={},
                     drone_failure_flags=failures,
+                    agent_states=np.array(
+                        [float(row.get(f"state_{i}", 0.0)) for i in range(n)],
+                        dtype=np.float64,
+                    ),
                 )
                 self._frames.append(frame)
 
@@ -181,12 +239,18 @@ class ReplayLoader:
         )
         regime = {i: df.get(f"regime_{i}", ["UNKNOWN"] * len(df["time"]))[idx] for i in range(n)}
 
+        adjacency, components = _reconstruct_graph(positions, self._comm_radius())
+        n_rows = len(df["time"])
+        agent_states = np.array(
+            [df.get(f"state_{i}", [0.0] * n_rows)[idx] for i in range(n)],
+            dtype=np.float64,
+        )
         return TelemetryFrame(
             time=df["time"][idx],
             positions=positions,
             energies=energies,
-            adjacency=np.zeros((n, n), dtype=np.uint8),
-            connected_components=[list(range(n))],
+            adjacency=adjacency,
+            connected_components=components,
             spectral_gap=df["spectral_gap"][idx],
             consensus_variance=df["consensus_variance"][idx],
             packet_drop_rate=df["packet_drop_rate"][idx],
@@ -194,6 +258,7 @@ class ReplayLoader:
             regime_state=regime,
             adaptive_parameters={},
             drone_failure_flags=failures,
+            agent_states=agent_states,
         )
 
     # ── Validation ───────────────────────────────────────────

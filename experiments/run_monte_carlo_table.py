@@ -54,7 +54,7 @@ def run_single_sim(args):
         
     decay = (init_energy - rem_energy) / (config.num_agents * surv) if surv > 0 else 0
     
-    cov_rate = summary.get("coverage_completion_rate", 0.0)
+    area_cov = summary.get("area_coverage_mean", 0.0)
     
     # Check hibernation numbers
     # We log these in the kernel logger, but we can also just extract them from sim.kernel_logger.history if available.
@@ -66,7 +66,7 @@ def run_single_sim(args):
         "energy_decay": decay,
         "survival": surv,
         "time_to_50pct_attrition": t50,
-        "coverage_completion_rate": cov_rate,
+        "area_coverage_mean": area_cov,
         "censored": censored
     }
 
@@ -87,7 +87,7 @@ def run_mc(runs=50):
             "energy_decay": [], 
             "survival": [], 
             "time_to_50pct_attrition": [],
-            "coverage_completion_rate": [],
+            "area_coverage_mean": [],
             "censored_count": 0
         } for mode in modes
     }
@@ -137,7 +137,7 @@ def run_mc(runs=50):
             results[mode_name]["energy_decay"].append(res["energy_decay"])
             results[mode_name]["survival"].append(res["survival"])
             results[mode_name]["time_to_50pct_attrition"].append(res["time_to_50pct_attrition"])
-            results[mode_name]["coverage_completion_rate"].append(res["coverage_completion_rate"])
+            results[mode_name]["area_coverage_mean"].append(res["area_coverage_mean"])
             if res["censored"]:
                 results[mode_name]["censored_count"] += 1
 
@@ -181,10 +181,9 @@ def run_mc(runs=50):
         l2 = results[mode]["lambda_2"]
         print(f"  [diagnostic, NOT a reportable result] run-mean lambda_2: "
               f"{np.mean(l2):.4f} +/- {ci(l2):.4f}")
-        # Audit F-18: measures ticks on which the coverage controller was
-        # nominally enabled, not coverage achieved. Pending fix 3.2.
-        print(f"  [diagnostic, known-broken metric] coverage_completion_rate: "
-              f"{np.mean(results[mode]['coverage_completion_rate']):.2%}")
+        print(f"  Area Coverage (arena fraction within R_tx of a living agent, "
+              f"time-mean): {np.mean(results[mode]['area_coverage_mean']):.2%} "
+              f"+/- {ci(results[mode]['area_coverage_mean']):.2%}")
 
         if len(surv) > 1 and np.std(surv) < (0.01 * np.mean(surv)):
             print("  *** Near-zero variance on Survival: right-censoring artifact. ***")

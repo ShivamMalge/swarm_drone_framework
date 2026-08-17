@@ -112,6 +112,18 @@ class Phase1Simulation:
         self._positions_dirty = True
         self.tree_rebuilds = 0
 
+        # Fixed sample lattice for the area-coverage metric: fraction of the
+        # arena within comm_radius of at least one LIVING agent, evaluated at
+        # metrics ticks. Replaces "coverage_completion_rate", which counted
+        # ticks on which the coverage controller was merely ENABLED and
+        # reported >90% for a random-walk arm (audit F-18).
+        _lat = 25
+        gx = np.linspace(0.0, config.grid_width, _lat)
+        gy = np.linspace(0.0, config.grid_height, _lat)
+        mx, my = np.meshgrid(gx, gy)
+        self._coverage_lattice = np.column_stack([mx.ravel(), my.ravel()])
+        self._area_coverage_samples: list[float] = []
+
         # ── Communication (dedicated RNG streams) ───────────
         self.comm_engine = CommunicationEngine(
             rgg_builder=RGGBuilder(config.comm_radius),
@@ -264,14 +276,6 @@ class Phase1Simulation:
             agent.oracle_centroid = self._compute_oracle_centroid(event.agent_id)
 
         # Agent computes velocity from local state only.
-        # Tick accounting lives HERE, not inside compute_velocity(): a tick is a
-        # kinematic event, and the metrics logger also calls compute_velocity()
-        # for reporting. Counting inside it conflated logging with simulation
-        # (audit F-17).
-        agent.total_ticks += 1
-        if agent.global_info_enabled or agent.coverage_gain > 0.05:
-            agent.coverage_ticks += 1
-
         velocity = agent.compute_velocity()
         # Cached so the metrics logger can report the commanded velocity without
         # re-invoking compute_velocity(), whose random-walk branch draws from the
@@ -643,6 +647,15 @@ class Phase1Simulation:
         # alive-only value was 0.0 (audit F-03).
         alive_pos = self._get_all_positions()[self.alive_mask]
         n_alive = len(alive_pos)
+
+        # Area coverage: fraction of lattice points within comm_radius of a
+        # living agent. 0.0 for an extinct swarm by construction.
+        if n_alive > 0:
+            d2 = ((self._coverage_lattice[:, None, :] - alive_pos[None, :, :]) ** 2).sum(axis=2)
+            covered = (d2.min(axis=1) <= self.config.comm_radius ** 2).mean()
+            self._area_coverage_samples.append(float(covered))
+        else:
+            self._area_coverage_samples.append(0.0)
         if n_alive > 1:
             metrics = compute_connectivity_metrics(
                 alive_pos, self.config.comm_radius
@@ -871,9 +884,8 @@ class Phase1Simulation:
         """Return a summary of simulation results."""
         alive = sum(1 for a in self.agents if a.is_alive)
         
-        total_ticks_sum = sum(a.total_ticks for a in self.agents)
-        coverage_ticks_sum = sum(a.coverage_ticks for a in self.agents)
-        coverage_rate = (coverage_ticks_sum / total_ticks_sum) if total_ticks_sum > 0 else 0.0
+        area_cov = (sum(self._area_coverage_samples) / len(self._area_coverage_samples)
+                    if self._area_coverage_samples else 0.0)
         
         return {
             "total_agents": self.config.num_agents,
@@ -888,7 +900,7 @@ class Phase1Simulation:
             "time_of_death": self.time_of_death,
             "time_to_50pct_attrition": self.time_to_50pct_attrition,
             "regimes_distribution": self._get_regime_distribution(),
-            "coverage_completion_rate": coverage_rate,
+            "area_coverage_mean": area_cov,
         }
 
     def close_loggers(self) -> None:

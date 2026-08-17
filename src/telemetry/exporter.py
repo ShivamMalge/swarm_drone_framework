@@ -99,6 +99,7 @@ def _frame_to_row(frame: TelemetryFrame, n_agents: int) -> dict[str, Any]:
         row[f"pos_y_{i}"] = float(frame.positions[i, 1]) if i < len(frame.positions) else 0.0
         row[f"energy_{i}"] = float(frame.energies[i]) if i < len(frame.energies) else 0.0
         row[f"failed_{i}"] = bool(frame.drone_failure_flags[i]) if i < len(frame.drone_failure_flags) else True
+        row[f"state_{i}"] = float(frame.agent_states[i]) if i < len(frame.agent_states) else 0.0
 
     # Regime (per-agent string)
     for i in range(n_agents):
@@ -251,6 +252,7 @@ class TelemetryExporter:
                     for k, v in fr.adaptive_parameters.items()
                 },
                 "drone_failure_flags": fr.drone_failure_flags.tolist(),
+                "agent_states": fr.agent_states.tolist(),
             }
             data.append(entry)
         with open(path, "w") as f:

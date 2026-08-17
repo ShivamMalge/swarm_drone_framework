@@ -14,12 +14,22 @@ from src.simulation import Phase1Simulation
 # ============================================================================
 
 def run_simulation(seed: int, p_drop: float, num_agents: int = 20, max_time: float = 30.0) -> Phase1Simulation:
+    # Full connectivity via a COMPACT ARENA, not a huge radius: transmission
+    # cost scales with (comm_radius/20)^2 per recipient, so the old fixture's
+    # comm_radius=100 charged 1.25 energy per recipient per tick and left 2 of
+    # 20 agents alive by t=10 -- auctions produced zero results because the
+    # bidders were dead, not because the protocol failed. A 45-radius over a
+    # 30-unit arena spans the diagonal (42.4) at ~20% of that cost, and
+    # energy_initial=500 keeps the swarm alive through every resolution window.
     config = SimConfig(
         num_agents=num_agents,
         p_drop=p_drop,
         seed=seed,
         max_time=max_time,
-        comm_radius=100.0, # Fully connected if no drop
+        grid_width=30.0,
+        grid_height=30.0,
+        comm_radius=45.0,   # > 30*sqrt(2): fully connected if no drop
+        energy_initial=500.0,
         auction_timeout=5.0
     )
     sim = Phase1Simulation(config)

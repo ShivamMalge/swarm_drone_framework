@@ -128,10 +128,20 @@ class TestScalabilityN100:
 
         assert sent > 0, "No messages sent"
         empirical_drop = dropped / sent
-        # With p_drop=0.2 and psi=0-0.3 (gaussian), effective rate is higher
-        # We check it's between 0.15 and 0.55 (generous band for stochastic)
-        assert 0.15 <= empirical_drop <= 0.55, (
-            f"Drop rate {empirical_drop:.3f} outside expected range"
+        # Expected drop under the three-factor survival model
+        #   p_survive = (1 - p_drop) * (1 - psi) * (1 - (d/R)^2):
+        # the interference field is CONSTANT at psi_max (Phase1Simulation
+        # hardcodes FieldMode.CONSTANT -- the "gaussian" in this comment's
+        # previous version was wrong), so with p_drop = 0.2 and psi = 0.3,
+        # E[drop] = 1 - 0.8 * 0.7 * E[1 - (d/R)^2]. For neighbours uniform in
+        # the disc E[path_loss] = 0.5, giving E[drop] = 0.72; real neighbour
+        # distances are not uniform-in-disc, so we take E[path_loss] in
+        # [0.36, 0.80] => drop in [0.55, 0.80]. Measured on this fixture:
+        # ~0.64. The old band [0.15, 0.55] predates the path-loss factor
+        # entirely and no configuration of the current model can satisfy it.
+        assert 0.55 <= empirical_drop <= 0.80, (
+            f"Drop rate {empirical_drop:.3f} outside the analytic band "
+            f"[0.55, 0.80] for the three-factor survival model"
         )
 
     def test_event_queue_never_negative(self):

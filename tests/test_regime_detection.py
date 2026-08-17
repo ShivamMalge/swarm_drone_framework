@@ -19,6 +19,7 @@ def run_regime_sim(
     max_time: float = 30.0,
     grid_size: float = 100.0,
     variance_high: float = 100.0, # Increased specifically to prevent initial RNG scatter from triggering MARGINAL
+    energy_initial: float = 100.0,
 ) -> tuple[Phase1Simulation, dict[str, int]]:
     """Helper to run a simulation and extract the ending regime histogram."""
     config = SimConfig(
@@ -29,13 +30,17 @@ def run_regime_sim(
         latency_mean=latency_mean,
         latency_min=0.01,
         p_move=p_move,
+        energy_initial=energy_initial,
         max_time=max_time,
         grid_width=grid_size,
         grid_height=grid_size,
         # Allow normal dense comm drain without triggering cascade
+        # NOTE: an earlier RegimeConfig had a 'classification_interval' field;
+        # the re-evaluation period is now 'dwell_time' (a polling interval, not
+        # a minimum-dwell constraint -- see RegimeConfig docstring).
         regime=RegimeConfig(
             window_size=3,
-            classification_interval=2.0,
+            dwell_time=2.0,
             energy_slope_critical=-3.0,
             variance_high=variance_high,
             staleness_high=10.0 # Preempts inherent dt=1.0 broadcasting gaps from triggering INTERMITTENT
@@ -58,10 +63,16 @@ class TestRegimeDetection:
 
     def test_stable_regime(self):
         """Under ideal conditions, the swarm should classify itself primarily as STABLE."""
-        # Tight grid, huge comm radius guarantees high neighbor counts, zero latency/drops
+        # Full connectivity WITHOUT ruinous transmission power: comm cost scales
+        # with (comm_radius / 20)^2 per recipient, so the old fixture's
+        # comm_radius=150 charged ~2.8 energy per recipient per tick and killed
+        # 19 of 20 agents by t=15 -- the lone survivor then classified MARGINAL
+        # on stale beliefs about the dead. A 30-radius over a 20-unit arena is
+        # fully connected at ~2% of that cost; energy_initial=500 keeps everyone
+        # alive through the classification window.
         _, dist = run_regime_sim(
-            seed=201, num_agents=20, comm_radius=150.0, grid_size=50.0,
-            p_drop=0.0, latency_mean=0.1, max_time=15.0
+            seed=201, num_agents=20, comm_radius=30.0, grid_size=20.0,
+            p_drop=0.0, latency_mean=0.1, max_time=15.0, energy_initial=500.0,
         )
         assert dist[Regime.STABLE] > 0, "No agents detected stable regime under ideal bounds"
         assert dist[Regime.FRAGMENTED] == 0, "Agents illegally detected fragmentation in ideal bounds"
@@ -76,9 +87,14 @@ class TestRegimeDetection:
 
     def test_energy_cascade_regime(self):
         """Under high drain conditions, agents must detect ENERGY_CASCADE."""
-        # Massive movement cost triggers rapid scalar drain slope
+        # p_move=5.0 gives a movement drain slope of ~-10/tick, far below the
+        # -3.0 critical slope. energy_initial=500 keeps agents alive through
+        # the classification window so the slope can actually be OBSERVED --
+        # the old fixture's comm_radius=150 killed the swarm before its first
+        # classification (see test_stable_regime note).
         _, dist = run_regime_sim(
-            seed=203, num_agents=20, p_move=5.0, comm_radius=150.0, grid_size=50.0, max_time=15.0
+            seed=203, num_agents=20, p_move=5.0, comm_radius=30.0,
+            grid_size=20.0, max_time=15.0, energy_initial=500.0,
         )
         assert dist[Regime.ENERGY_CASCADE] > 0, "Agents failed to detect rapid energy burn slope"
 

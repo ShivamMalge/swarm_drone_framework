@@ -10,12 +10,12 @@ This repository contains the official codebase for the paper: **Decentralized Sw
 
 Modern cyber-physical systems (CPS) often rely on decentralized swarms for robust spatial operations. However, existing simulators frequently assume perfect continuous-time communication and abstract away real thermodynamic energy costs. 
 
-**DSAF** is engineered to test swarms under realistic, contested conditions. It enforces strict "Fog-of-War" constraints (probabilistic packet drops via a Random Geometric Graph) and models thermodynamic energy cascades. The core innovation of this framework is the **Stability-Constrained Adaptation Protocol**, which allows agents to adapt their behavior heuristically while mathematically guaranteeing they do not induce kinematic oscillations that drain the swarm's battery.
+**DSAF** is engineered to test swarms under realistic, contested conditions. It enforces strict "Fog-of-War" constraints (a Random Geometric Graph whose per-transmission survival probability combines a baseline drop rate, exogenous interference, and distance-dependent path loss) and models thermodynamic energy costs. Its central mechanism is a **Stability-Constrained Adaptation Pipeline** -- a static safety box constraint plus a bisection search against a locally computed delay-tolerant bound, followed by EMA smoothing. The paper makes no claim of a mathematical stability guarantee: the pipeline is a heuristic bounding layer, and the paper reports measured behaviour, including its negative results.
 
 ### Key Features
 1. **Enforced Fog-of-War:** Agents operate exclusively on stale, asynchronous neighbor data stored in a `LocalMap`. Zero access to global topology arrays.
-2. **Thermodynamic Braking:** When the local spectral proxy detects fragmentation or chaotic variance, agents mathematically clamp their velocity to `0.0`. By physically halting, agents eliminate kinetic energy penalties and coast on the baseline transmission cost ($0.05$ units/tick), successfully matching the survival rate of a centralized oracle.
-3. **Bounded Heuristic Clamping:** A 5-step local Bisection Search intercepts behavioral mutations from the Hybrid Supervisor, projecting them against local stability boundaries to prevent kinematic divergence.
+2. **Emergent Halt Under Isolation:** No velocity is ever clamped to zero. When belief eviction empties an isolated agent's map, the localized Voronoi coverage law lands on a stationary fixed point (an isolated agent's cell centroid is its own position), so fragmented remnants halt and coast at idle-plus-transmission cost. This emergent mechanism -- not the adaptation pipeline -- produces the measured 5.2x reduction in mean energy decay versus the unconstrained baseline.
+3. **Bounded Heuristic Clamping:** A two-stage projector intercepts every parameter proposal: a static box clamp (the stage responsible for the energy result) followed by a 5-step bisection against a locally computed consensus step-size bound. The bound demonstrably prevents numerically unbounded consensus divergence, and demonstrably does not affect energy or attrition -- both facts are reported in the paper.
 4. **Deterministic Reproducibility:** The DES kernel is driven by independent, pre-seeded PRNG streams, ensuring exact stochastic replay of packet drops and delays.
 
 ---
@@ -29,7 +29,7 @@ swarm_drone_framework/
 │   ├── adaptation/             # Hybrid Supervisor & Bisection Projector
 │   ├── agent/                  # Decentralized Agent Logic & Fog-of-War Map
 │   ├── communication/          # RGG, Packet Drop Physics, Latency Models
-│   ├── coordination/           # Gossip Consensus, SSI Auctions, Voronoi
+│   ├── coordination/           # Gossip Consensus, Energy-Aware Auctions, Voronoi
 │   ├── core/                   # Event Queue, Config, and DES Kernel
 │   └── regime/                 # Local Spectral Proxy & Variance Trackers
 │
@@ -72,12 +72,12 @@ To run the primary 50-seed Monte Carlo evaluation comparing the Unconstrained RG
 ```bash
 python experiments/run_monte_carlo_table.py
 ```
-*Note: A 50-run suite executes 150 total simulations (evaluating millions of discrete events) and takes approximately 35-40 minutes on standard hardware.*
+*Note: A 50-run suite executes 150 total simulations (~20 million discrete events) and takes roughly 3-4 minutes on an 8-core machine.*
 
-**Expected Output Metrics:**
-*   **Unconstrained RGG:** Rapid kinematic oscillation leading to early death ($\sim 527$ ticks).
-*   **Centralized Oracle:** Perfect survival ($\sim 1999$ ticks) with baseline energy drain.
-*   **Proposed Framework:** Matches the Oracle ($\sim 1999$ ticks) purely through decentralized thermodynamic braking.
+**Expected Output Metrics (means over 50 seeds; see the paper for confidence intervals and caveats):**
+*   **Unconstrained RGG:** energy decay ~0.26 units/tick; total swarm death at ~407 ticks.
+*   **Centralized Oracle (all-to-all comm. cost):** the shortest-lived arm (~39 ticks) -- global awareness is billed as global bandwidth, and that cost consumes its coordination benefit.
+*   **Proposed Framework:** energy decay ~0.05 units/tick (5.2x below baseline); all 50 runs right-censored at the 2000-tick horizon. Time to 50% attrition is statistically indistinguishable from the unconstrained baseline (~128 vs ~127 ticks) -- the framework does not delay half-swarm loss, and the paper says so.
 
 ---
 

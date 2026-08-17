@@ -95,6 +95,10 @@ class TelemetryFrame:
             latency=0.0,
             regime_state={i: "STABLE" for i in range(n)},
             adaptive_parameters={},
-            drone_failure_flags=np.ones(n, dtype=bool),
+            # np.zeros: an empty frame is "nothing known", not "all dead".
+            # The previous np.ones default declared the entire swarm dead
+            # (audit F-33), and the same fail-dead default leaked into every
+            # loader fallback path.
+            drone_failure_flags=np.zeros(n, dtype=bool),
             agent_states=np.zeros(n, dtype=np.float64),
         )

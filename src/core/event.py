@@ -23,7 +23,9 @@ class EventType(enum.IntEnum):
     ENERGY_UPDATE = 2
     MSG_TRANSMIT = 3
     MSG_DELIVER = 4
-    AUCTION_TIMEOUT = 5
+    # 5 was AUCTION_TIMEOUT: never scheduled, no handler ever registered.
+    # Removed rather than left as a dead member; the gap in the numbering is
+    # kept so existing priority orderings stay stable.
     METRICS_LOG = 6
     CONSENSUS_UPDATE = 7
     
