@@ -878,7 +878,15 @@ feasibility in consistent units:
 - t50 now 98 vs 98 — still indistinguishable, conclusion unchanged.
 - **Headline ratio becomes 5.6× (was 4.5×) — a favourable shift, which is exactly when these numbers must not be self-adopted.** PENDING block updated above Table III; §V-C untouched; awaiting author review.
 
-`[MS-15]` (Algorithm 2 pseudocode) and `[MS-16]` (§V-C causal chain) remain open pending that decision — the pseudocode should be written against whichever formulation is accepted.
+`[MS-15]` and `[MS-16]` — ✅ DONE (numbers adopted by author, 2026-08-16, with the framing directives applied):
+
+- **Table III adopted**: t50 98±2 / 98±2 / 21±0; decay 0.289±0.022 / 0.051±0.002 / 2.801±0.207; survival 373±31 / >2000 (47/50 censored) / 39±4. Abstract and §V-A updated to match (5.6×). PENDING block removed.
+- **`[MS-16]`** §V-C rewritten: (1) the 4.5×→5.6× shift stated explicitly as a *baseline correction, not an improvement* — the broken auction meant Unconstrained agents never paid task-pursuit movement costs, the same silent-protection pattern as the duplicate ε-clamp; (2) one line on the old bid's inert reward term (constant per task across bidders — the printed formula's reward-sensitivity never influenced a winner); (3) **the 3/50 (6%) total-loss tail reported as a finding, framed against F-04**: the Voronoi stationary fixed point halts isolated agents, task pursuit is the one mechanism that overrides the halt, the two are in direct opposition, and part of the headline energy advantage comes from *not* performing task work under fragmentation. Figure 4 caption fixed (96%/100% attrition, not 50%; single-run illustrative, stats from Table III).
+- **`[MS-15]`** Algorithm 2 pseudocode rewritten against the implemented mechanism: event-driven per-task bidding (no task-set argmin), min-cost bid `‖p_i−p_τ‖ + ω_e/E_i` with `ω_e = E_0`, consistent-unit feasibility gate, single-commitment rule, expiry, round-robin gossip, and resolution as a read of the gossip-merged local belief — with the split-brain multiplicity stated as a measured property, not hidden. The gossip-selection failure history (random dilution; recency starvation) is documented in the algorithm's endnote.
+- Renamed "Decentralized SSI Auction" → "Decentralized Energy-Aware Auction" throughout (the mechanism was never sequential-single-item); SSI survives only in the §II literature survey. **`[MS-21]` also discharged in passing**: §III-B's dwell-time sentence replaced with the honest polling-interval statement.
+- `tab:oracle_sensitivity` re-measured under the adopted code (Unconstrained 0.259±0.039 / 418±83 / t50 96±5; Proposed 0.053±0.005 / 1926±137 / 9/10 censored; oracle rows unchanged — bypass the auction path). Oracle conclusions stable: per-neighbour still ~2× t50 (199 vs 97), all-to-all still shortest-lived.
+- Figures regenerated from the adopted code and published (md5 MATCH all three).
+- Retired-number sweep clean: `0.050±0.001`, `0.228` (except the intentional §V-C correction narrative), `4.5×`, `101±2`, `100±2`, `49/50`, `102±4`, `2000±0`, `10/10` — all 0 hits.
 
 **`[MS-15]`** Update Algorithm 2's pseudocode to match: single-`τ_target` selection vs per-task bidding, the argmin/argmax convention, and the fact that resolution reads a cached winner rather than comparing against `min(B_nbrs)`.
 
