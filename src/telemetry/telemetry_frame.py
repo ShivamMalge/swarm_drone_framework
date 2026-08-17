@@ -76,7 +76,16 @@ class TelemetryFrame:
     regime_state: dict[int, str]
     adaptive_parameters: dict[str, Any]
     drone_failure_flags: np.ndarray  # (N,) bool
-    agent_states: np.ndarray         # (N,) float64
+    # (N,) float64 consensus-state snapshot. Defaults to None and is
+    # normalised to zeros in __post_init__: this field was added after most
+    # frame constructors were written, and its being REQUIRED made
+    # TelemetryFrame unconstructable for the replay loader (F-25) and 16 GUI
+    # tests simultaneously. Auxiliary telemetry should not be able to do that.
+    agent_states: np.ndarray | None = None
+
+    def __post_init__(self) -> None:
+        if self.agent_states is None:
+            self.agent_states = np.zeros(len(self.positions), dtype=np.float64)
 
     # ── Factory helpers ──────────────────────────────────────
 

@@ -89,25 +89,41 @@ class ScenarioConfig:
         }
 
     def to_sim_config(self, base_cfg: SimConfig) -> SimConfig:
-        """Create a new SimConfig built on base_cfg but overriding with scenario parameters."""
+        """
+        Create a new SimConfig built on base_cfg but overriding with scenario
+        parameters.
+
+        Uses dataclasses.replace, NOT asdict + SimConfig(**d): asdict recurses
+        into the nested RegimeConfig and flattens it to a plain dict, after
+        which AgentCore dereferences reg_cfg.window_size on the dict and every
+        scenario load crashed with AttributeError (audit F-35 -- the GUI's
+        "run custom scenario" path was dead end-to-end).
+
+        Note: self.tasks (count/distribution) is deliberately NOT mapped.
+        Tasks spawn via a continuous Poisson process (TASK_SPAWN events); a
+        fixed task count has no SimConfig counterpart, and pretending to apply
+        it would be the silent-flag pattern this project keeps paying for
+        (audit F-36). The validator still checks the fields so saved scenario
+        files round-trip, and the panel surfaces them as informational only.
+        """
         import dataclasses
-        d = dataclasses.asdict(base_cfg)
-        d["num_agents"] = self.num_agents
-        d["seed"] = self.seed
-        d["comm_radius"] = self.communication_radius
-        d["energy_initial"] = self.energy_params.initial_energy
-        d["p_idle"] = self.energy_params.drain_rate
-        d["max_time"] = self.simulation.duration
-        d["dt"] = self.simulation.dt
-        
-        # Interference logic maps roughly to p_drop scaling in Phase 2
-        # Without deeper kernel hacks, we'll map intensity to a baseline global packet drop
-        # or rely on SimulationWorker APIs. We'll set psi_max.
+
+        overrides = dict(
+            num_agents=self.num_agents,
+            seed=self.seed,
+            comm_radius=self.communication_radius,
+            energy_initial=self.energy_params.initial_energy,
+            p_idle=self.energy_params.drain_rate,
+            max_time=self.simulation.duration,
+            dt=self.simulation.dt,
+        )
         if self.interference.enabled:
-            d["psi_max"] = self.interference.intensity
-            d["p_drop"] = max(base_cfg.p_drop, self.interference.intensity * 0.5)
-            
-        return SimConfig(**d)
+            overrides["psi_max"] = self.interference.intensity
+            overrides["p_drop"] = max(
+                base_cfg.p_drop, self.interference.intensity * 0.5
+            )
+
+        return dataclasses.replace(base_cfg, **overrides)
 
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> ScenarioConfig:

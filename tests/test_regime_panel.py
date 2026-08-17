@@ -22,7 +22,9 @@ def test_regime_panel():
     buf = TelemetryBuffer()
     worker = SimulationWorker(simulation_config=cfg, telemetry_buffer=buf, frame_dt=0.05)
     bridge = TelemetryBridge(telemetry_buffer=buf, poll_interval_ms=16)
-    window = MainWindow(telemetry_bridge=bridge)
+    # MainWindow gained a required 'worker' arg (start/pause/reset wiring);
+    # these tests predate it and failed on TypeError.
+    window = MainWindow(telemetry_bridge=bridge, worker=worker)
 
     window.show()
     bridge.start()

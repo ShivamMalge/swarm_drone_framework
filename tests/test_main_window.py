@@ -21,20 +21,24 @@ def test_main_window():
     buf = TelemetryBuffer()
     worker = SimulationWorker(simulation_config=cfg, telemetry_buffer=buf, frame_dt=0.05)
     bridge = TelemetryBridge(telemetry_buffer=buf, poll_interval_ms=16)
-    window = MainWindow(telemetry_bridge=bridge)
+    # MainWindow gained a required 'worker' arg (start/pause/reset wiring);
+    # these tests predate it and failed on TypeError.
+    window = MainWindow(telemetry_bridge=bridge, worker=worker)
 
     # 1. Window launches
     window.show()
     assert window.isVisible(), "Window not visible"
     print("[PASS] window_launch")
 
-    # 2. Layout placeholders exist
-    assert window.swarm_map_placeholder is not None
-    assert window.regime_placeholder is not None
-    assert window.adaptive_placeholder is not None
-    assert window.spectral_placeholder is not None
-    assert window.energy_placeholder is not None
-    assert window.consensus_placeholder is not None
+    # 2. Core panels exist. (The pre-refactor window exposed
+    # swarm_map_placeholder; the current one wires real widgets.)
+    assert window.swarm_map is not None
+    assert window.graphs_panel is not None
+    assert window.regime_panel is not None
+    assert window.adaptive_panel is not None
+    assert window.spectral_panel is not None
+    assert window.energy_panel is not None
+    assert window.consensus_panel is not None
     print("[PASS] layout_structure")
 
     # 3. Signal triggers update_frame

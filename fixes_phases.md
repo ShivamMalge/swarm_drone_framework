@@ -1197,7 +1197,19 @@ Each of these must assert on a measured quantity or be deleted:
 - **line 41** delete the unused `events1`.
 
 **Verify:** deliberately break one invariant (e.g. force a bound violation) and confirm the corresponding check reports `FAILURE`. A check that cannot be made to fail is not a check.
-**Evidence:** _(paste both the passing and the deliberately-failed run)_
+
+**Evidence:** ✅ DONE — full rewrite. Every check now asserts on measured quantities: Fog-of-War probes the REAL oracle channel at runtime; Communication Locality instruments the drop sampler and verifies every delivery is within the sender's tx_radius (2088 deliveries checked); Task Resolution instruments task consumption and verifies wins>0 and all consumption distances <= r_task; Stability Constraints requires projections>0 AND all final parameters inside bounds; the wall-clock check is relabelled Performance Benchmark. Normal run:
+```
+9/9 checks passed.   (incl. "2088 deliveries, all within the sender's tx_radius",
+                      "8 auction wins; 4 tasks consumed, all within r_task=2.0",
+                      "486 projection events; every final parameter inside THETA_SAFE_BOUNDS")
+```
+`--self-test` deliberately sabotages the projector (passthrough) and the audit must catch it:
+```
+[FAILURE] Stability Constraints: projections=0, out_of_bounds=[(0, 'coverage_gain', 0.162...), (0, 'gossip_epsilon', 0.0827...), ...]
+SELF-TEST PASSED: sabotaged projector was caught by the audit.
+```
+**Self-test design error caught en route and documented in-file:** the first sabotage widened `THETA_SAFE_BOUNDS` — and the audit still passed 9/9, because the "inside bounds" clause compares against the same sabotaged dict (self-referential) while the bisection kept firing events on its own. The sabotage must be external to the check's reference; disabling the projector function is the honest breakage.
 
 ### 4.3 — Fix replay `[F-25, F-31]`
 

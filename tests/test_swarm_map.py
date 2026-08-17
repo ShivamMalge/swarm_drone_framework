@@ -21,7 +21,9 @@ def test_swarm_map():
     buf = TelemetryBuffer()
     worker = SimulationWorker(simulation_config=cfg, telemetry_buffer=buf, frame_dt=0.05)
     bridge = TelemetryBridge(telemetry_buffer=buf, poll_interval_ms=16)
-    window = MainWindow(telemetry_bridge=bridge)
+    # MainWindow gained a required 'worker' arg (start/pause/reset wiring);
+    # these tests predate it and failed on TypeError.
+    window = MainWindow(telemetry_bridge=bridge, worker=worker)
 
     window.show()
     bridge.start()
@@ -33,13 +35,15 @@ def test_swarm_map():
     worker.stop_simulation()
     bridge.stop()
 
-    # Verify scatter has data
-    scatter_data = window.swarm_map._scatter.data
+    # Verify the node scatter has data. (The widget was refactored from
+    # SwarmMapWidget._scatter to NetworkViewer.node_item; this assertion
+    # tracked the old attribute and failed on AttributeError.)
+    scatter_data = window.swarm_map.node_item.data
     assert len(scatter_data) > 0, "No scatter data rendered"
     print(f"[PASS] agents_rendered (n={len(scatter_data)})")
 
     # Verify edges had data at some point
-    edge_data = window.swarm_map._edges.getData()
+    edge_data = window.swarm_map.edge_item.getData()
     if edge_data[0] is not None and len(edge_data[0]) > 0:
         print(f"[PASS] edges_rendered (segments={len(edge_data[0])//2})")
     else:

@@ -27,6 +27,9 @@ class _RingBuffer:
         self._count = 0
         self._idx = 0
 
+    def __len__(self) -> int:
+        return self._count
+
     def append(self, value: float) -> None:
         self._buf[self._idx] = value
         self._idx = (self._idx + 1) % self._max

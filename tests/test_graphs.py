@@ -20,7 +20,9 @@ def test_graphs():
     buf = TelemetryBuffer()
     worker = SimulationWorker(simulation_config=cfg, telemetry_buffer=buf, frame_dt=0.05)
     bridge = TelemetryBridge(telemetry_buffer=buf, poll_interval_ms=16)
-    window = MainWindow(telemetry_bridge=bridge)
+    # MainWindow gained a required 'worker' arg (start/pause/reset wiring);
+    # these tests predate it and failed on TypeError.
+    window = MainWindow(telemetry_bridge=bridge, worker=worker)
 
     window.show()
     bridge.start()
@@ -47,7 +49,8 @@ def test_graphs():
     
     print(f"[PASS] graphs_rendered (points={len(x_data)})")
     
-    assert window._status_label.text().startswith("Agents:")
+    # Status line format changed with the UI refactor ("State: ... | Agents:").
+    assert "Agents:" in window._status_label.text()
     assert "FPS:" in window._status_label.text()
     assert "Regime:" in window._status_label.text()
     print(f"[PASS] status_bar_format: {window._status_label.text()}")
