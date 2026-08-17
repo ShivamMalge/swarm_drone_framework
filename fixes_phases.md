@@ -1267,6 +1267,8 @@ Also wire `TaskParams.count`/`.distribution` into `to_sim_config`, or remove the
 
 Do not submit until every box is ticked with pasted evidence.
 
+**GATE EXECUTED 2026-08-17 — results inline below. Three boxes remain open: PDF recompile (held pending author review of the gate report), ORCID, author list (both author-blocked by design).**
+
 - [ ] **`grep -c "PENDING REGENERATION" manuscript/final_manuscript.tex` → `0`.** Nothing compiles for submission while that block is present. It sits above Table III precisely so a stale table cannot look authoritative; it is removed only when 1.2/1.3 have regenerated the numbers and pasted the runner output here.
 - [ ] `grep -c "No such issues were identified" manuscript/final_manuscript.tex` → `0`
 - [ ] All three `manuscript/fig*.png` md5-match their regenerated `plots/` source
@@ -1278,8 +1280,9 @@ Do not submit until every box is ticked with pasted evidence.
 - [ ] No figure annotation refers to a mechanism absent from `src/`
 - [ ] `python -m pytest tests/ -q` → 0 failed, 0 errors
 - [ ] `python diagnostics_audit.py` → no check that is incapable of failing
+- [ ] **`python experiments/sweep_retired_claims.py` → exit 0.** Encoding-agnostic (UTF-8/16LE/16BE/32LE, zip members opened, digit-boundary-aware). Exists because the UTF-16 `mc_results` files defeated every plain grep this project ran; the tool's docstring states exactly what it cannot reach (compressed PDF/PNG payloads, text rendered into images, git history) so the guarantee has known limits rather than assumed totality. Must be re-run at submission time, not just once.
 - [ ] `draft 11.pdf` recompiled from the corrected `.tex`, or deleted from the repo so the stale version cannot be mistaken for current
-- [ ] ORCID `0000-0001-9876-5432` verified as real
-- [ ] Author list reconciled between the PDF (3 authors) and the `.tex` (4 authors)
+- [ ] **BLOCKED ON AUTHOR — ORCID.** `0000-0001-9876-5432` follows a placeholder pattern and cannot be verified from inside the repo. The author will confirm with the co-author before submission; the gate DOES NOT PASS with this box unchecked, regardless of every other item.
+- [ ] **BLOCKED ON AUTHOR — author list.** PDF has 3 authors, `.tex` has 4. Human decision, explicitly not discharged by the assistant. Same rule: the gate does not pass unchecked.
 
 **Only when every box above is ticked may `rust_conversion_plan.md` begin.** Porting the current code to Rust would carry every defect above into a second implementation and make them harder to find.

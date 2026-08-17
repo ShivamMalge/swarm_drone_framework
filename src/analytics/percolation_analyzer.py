@@ -52,6 +52,7 @@ class PercolationAnalyzer(QObject):
         self._in_collapse_state: bool = False
         self._last_adj_hash: int = -1
         self._last_metrics: PercolationMetrics | None = None
+        self._last_time: float = -1.0  # was created lazily via hasattr (F-27)
 
         # Temporal Tracking
         self.time_history = collections.deque(maxlen=history_size)
@@ -61,7 +62,10 @@ class PercolationAnalyzer(QObject):
     def analyze_frame(self, frame: TelemetryFrame) -> PercolationMetrics:
         """Process a frame, maintain history, and emit collapse events if bounds crossed."""
         # 1. Efficient Computation: Avoid full recompute if adjacency unchanged
-        adj_hash = hash(frame.adjacency.data.tobytes())
+        # Failure flags in the key: components are computed over living agents
+        # (audit F-27, same defect as the spectral analyzer's cache).
+        adj_hash = hash(frame.adjacency.data.tobytes()
+                        + frame.drone_failure_flags.tobytes())
         alive_mask = ~frame.drone_failure_flags
         total_agents = int(len(alive_mask))  # Base ratio on absolute total swarm size
 
@@ -121,10 +125,14 @@ class PercolationAnalyzer(QObject):
                 lcc_nodes=lcc_nodes,
             )
 
-        metrics = self._last_metrics
+        # Work on a COPY: the previous code mutated the cached object in place
+        # (d_ratio_dt, state) and returned it by reference, so earlier callers'
+        # results changed under them (audit F-27).
+        import dataclasses as _dc
+        metrics = _dc.replace(self._last_metrics)
 
         # Rate of Change calculation
-        dt = frame.time - self._last_time if hasattr(self, '_last_time') and self._last_time >= 0 else 1.0
+        dt = frame.time - self._last_time if self._last_time >= 0 else 1.0
         if dt <= 0:
             dt = 1e-6
         self._last_time = frame.time

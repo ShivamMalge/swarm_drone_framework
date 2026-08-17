@@ -85,7 +85,9 @@ class TelemetryEmitter:
         connected_components = self._compute_components(adjacency, n)
 
         # ── 6. Spectral gap λ₂ ──────────────────────────────
-        spectral_gap = self._compute_spectral_gap(adjacency, n)
+        spectral_gap = self._compute_spectral_gap(
+            adjacency, n, alive_mask=~drone_failure_flags
+        )
 
         # ── 7. Consensus variance (global analytic) ─────────
         consensus_states = np.array(
@@ -168,18 +170,30 @@ class TelemetryEmitter:
         return components
 
     @staticmethod
-    def _compute_spectral_gap(adj: np.ndarray, n: int) -> float:
-        """Compute algebraic connectivity λ₂ from the adjacency matrix."""
+    def _compute_spectral_gap(adj: np.ndarray, n: int,
+                              alive_mask: np.ndarray | None = None) -> float:
+        """
+        Compute algebraic connectivity λ₂ over LIVING agents.
+
+        Dead agents previously stayed in the matrix (audit F-32 -- the same
+        corpse-connectivity defect as F-03, reproduced in the export path),
+        so exported/replayed spectral_gap disagreed with SpectralAnalyzer's
+        correct alive-filtered value.
+        """
+        if alive_mask is not None:
+            adj = adj[alive_mask][:, alive_mask]
+            n = adj.shape[0]
         if n <= 1:
             return 0.0
 
         degree = adj.sum(axis=1).astype(np.float64)
-        laplacian = np.diag(degree) - adj.astype(np.float64)
+        if np.any(degree == 0):
+            return 0.0  # a disconnected graph has λ₂ = 0 exactly
 
+        laplacian = np.diag(degree) - adj.astype(np.float64)
         try:
             eigvals = np.linalg.eigvalsh(laplacian)
-            # eigvalsh returns sorted ascending; λ₂ is index 1
-            return float(eigvals[1])
+            return float(max(0.0, eigvals[1]))
         except np.linalg.LinAlgError:
             return 0.0
 

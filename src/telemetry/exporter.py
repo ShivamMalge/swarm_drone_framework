@@ -72,11 +72,15 @@ def _generate_run_id(scenario: str, seed: int) -> str:
 
 
 def _config_to_dict(cfg: SimConfig) -> dict[str, Any]:
-    """Produce a JSON-safe snapshot of the frozen SimConfig."""
-    d = dataclasses.asdict(cfg)
-    # Remove non-serializable fields
-    d.pop("regime", None)
-    return d
+    """
+    Produce a JSON-safe snapshot of the frozen SimConfig.
+
+    The nested RegimeConfig is KEPT: dataclasses.asdict already renders it as
+    a plain dict, which json serialises fine. The previous pop("regime") was
+    cargo-cult "non-serializable" caution that made exported runs
+    unreconstructable (audit 4.3 item 4).
+    """
+    return dataclasses.asdict(cfg)
 
 
 # ── Frame → flat row ────────────────────────────────────────
@@ -127,6 +131,7 @@ class TelemetryExporter:
         self._max_buffer = max_buffer
 
         self._frames: deque[TelemetryFrame] = deque(maxlen=max_buffer)
+        self._frames_recorded = 0   # total offered, incl. any silently evicted
         self._lock = threading.Lock()
 
         self._run_id: str = ""
@@ -146,6 +151,7 @@ class TelemetryExporter:
         """Freeze config, generate run_id, reset buffer."""
         with self._lock:
             self._frames.clear()
+            self._frames_recorded = 0
         self._scenario = scenario
         self._config_snapshot = _config_to_dict(config)
         self._run_id = _generate_run_id(scenario, config.seed)
@@ -156,6 +162,7 @@ class TelemetryExporter:
         """Append frame (thread-safe, bounded)."""
         with self._lock:
             self._frames.append(frame)
+            self._frames_recorded += 1
 
     def flush(self, formats: tuple[str, ...] = ("csv", "json", "parquet")) -> None:
         """Export accumulated frames to disk in a background thread."""
@@ -165,6 +172,13 @@ class TelemetryExporter:
 
         if not frames:
             return
+
+        if self._frames_recorded > len(frames):
+            import warnings
+            warnings.warn(
+                f"TelemetryExporter: {self._frames_recorded - len(frames)} "
+                f"oldest frames were evicted by the {self._max_buffer}-frame "
+                f"ring buffer and will not be exported.", stacklevel=2)
 
         run_id = self._run_id
         for cb in self.on_export_started:
@@ -200,6 +214,12 @@ class TelemetryExporter:
             "duration": frames[-1].time - frames[0].time if len(frames) > 1 else 0.0,
             "total_agents": n_agents,
             "total_frames": len(frames),
+            # Silent ring-buffer eviction accounting (audit 4.3 item 3): the
+            # deque caps at max_buffer, so beyond it the OLDEST frames are
+            # discarded. metadata previously recorded only the truncated
+            # count, so the loss was invisible to loaders and validators.
+            "frames_offered": self._frames_recorded,
+            "frames_dropped": max(0, self._frames_recorded - len(frames)),
             "config_snapshot": self._config_snapshot,
         }
 

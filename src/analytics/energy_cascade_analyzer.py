@@ -73,6 +73,7 @@ class EnergyCascadeAnalyzer(QObject):
         recovery_threshold: float = 0.05,
         stress_drop_rate: float = 2.0,  # Joules/sec threshold
         window_frames: int = 10,
+        initial_energy: float | None = None,
     ) -> None:
         super().__init__()
         self._cascade_threshold = cascade_threshold
@@ -89,6 +90,13 @@ class EnergyCascadeAnalyzer(QObject):
         self._last_mean_energy: float = -1.0
 
         self._failure_window = _RingBuffer(window_frames)
+
+        # Normalisation baseline. When provided, normalized_energy is relative
+        # to the CONFIGURED initial energy; otherwise it falls back to the
+        # mean of the first frame this analyzer happens to see -- which made
+        # every normalized value relative to attach time (audit F-28/F-30).
+        if initial_energy is not None:
+            self._initial_mean_energy = float(initial_energy)
 
         # UI Smoothing buffers
         self._ema_mean_energy: float = -1.0

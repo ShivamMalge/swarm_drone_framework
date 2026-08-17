@@ -97,7 +97,9 @@ class SwarmHealthAnalyzer(QObject):
         # If margins are extremely close to failure (< 0.05), subtract small safety factor
         if perc.connectivity_margin < 0.05: score -= 0.05
         if spec.spectral_margin < 0.05: score -= 0.05
-        if eng.cascade_margin > -0.05: score -= 0.05 # Cascade happens when intensity exceeds threshold, margin > 0.
+        # cascade_margin = intensity - threshold; > -0.05 means within 0.05
+        # BELOW the cascade threshold or beyond it, i.e. near-or-in cascade.
+        if eng.cascade_margin > -0.05: score -= 0.05
         
         # 5. Event Override
         if perc.state == "COLLAPSE":

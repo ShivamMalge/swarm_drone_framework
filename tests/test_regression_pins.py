@@ -98,7 +98,7 @@ def test_interference_clamped_to_unit_interval():
 
 # ── F-17: observing a simulation must not change it ──────────────────────
 
-def test_metrics_logging_does_not_perturb_trajectories():
+def test_metrics_logging_does_not_perturb_trajectories(tmp_path):
     """
     Incident: the metrics logger called compute_velocity() for reporting;
     that method's random-walk branch draws from the agent RNG, so LOGGED runs
@@ -109,8 +109,12 @@ def test_metrics_logging_does_not_perturb_trajectories():
     on vs off. ('thermodynamics' also randomises initial energy, so it is not
     a pure logging toggle.)
     """
+    # log_dir is a pytest tmp dir: this pin runs a KernelLogger-attached
+    # simulation, and pointing it at the real logs/ would drop a stray
+    # experiment_3_stability.csv next to the *_merged.csv figure sources --
+    # the same scratch-log collision class the merged-rename exists to close.
     base = dict(seed=5, num_agents=20, max_time=100.0, coverage_enabled=True,
-                log_dir="logs")
+                log_dir=str(tmp_path))
     a = Phase1Simulation(SimConfig(test_mode=None, **base))
     a.run()
     b = Phase1Simulation(SimConfig(test_mode="stability", **base))

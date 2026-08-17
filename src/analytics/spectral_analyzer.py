@@ -56,9 +56,13 @@ class SpectralAnalyzer(QObject):
     def analyze_frame(self, frame: TelemetryFrame) -> SpectralMetrics:
         """Calculate algebraic connectivity and maintain tracking history."""
         # Detect topology changes using hash mapping
-        adj_hash = hash(frame.adjacency.data.tobytes())
+        # Cache key must include the failure flags: lambda_2 is computed over
+        # LIVING agents, so deaths with an unchanged adjacency previously
+        # served a stale cached value (audit F-27).
+        adj_hash = hash(frame.adjacency.data.tobytes()
+                        + frame.drone_failure_flags.tobytes())
         alive_mask = ~frame.drone_failure_flags
-        
+
         # Check cache
         if adj_hash == self._last_adj_hash and self._last_time >= 0:
             lambda2 = self._last_lambda2

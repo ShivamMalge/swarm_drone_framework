@@ -147,8 +147,10 @@ class ResearchMetricsEngine(QObject):
             m.stability.time_in_stable += dt
             if m.stability._stable_start < 0:
                 m.stability._stable_start = t
-        else:
-            if m.stability._stable_start >= 0 and m.stability.time_to_stability == 0:
+            # First time the swarm REACHED stability. The previous code
+            # assigned this in the else-branch -- recording the moment
+            # stability was LOST, the opposite of the field's name (F-29).
+            if m.stability.time_to_stability == 0:
                 m.stability.time_to_stability = t
                 
         # Connectivity
@@ -188,16 +190,20 @@ class ResearchMetricsEngine(QObject):
         m.consensus._last_osc = osc_active
         
         # Anomaly
-        m.anomaly.total_anomalies += anom.anomaly_count # Actually we want unique anomalies? "total" could be integral
+        # Frame-integral of the instantaneous anomaly count (anomaly-frames),
+        # NOT a count of unique anomalies; named accordingly at export time.
+        m.anomaly.total_anomalies += anom.anomaly_count
         if anom.anomaly_count > m.anomaly.peak_anomalies:
             m.anomaly.peak_anomalies = anom.anomaly_count
         if anom.anomaly_count > 0:
             m.anomaly.anomaly_duration += dt
             
-        # Health
-        m.health.sum_health += health.health_score
-        if health.health_score < m.health.min_health:
-            m.health.min_health = health.health_score
+        # Health -- aggregate the RAW score. health_score is an 0.8/0.2 EMA
+        # display smoother; exporting it as the research metric meant the
+        # research numbers were UI artifacts lagging true state (F-28).
+        m.health.sum_health += health.raw_score
+        if health.raw_score < m.health.min_health:
+            m.health.min_health = health.raw_score
         if health.state in ["CRITICAL", "COLLAPSE"]:
             m.health.time_in_critical += dt
             

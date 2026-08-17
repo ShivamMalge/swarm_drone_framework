@@ -97,7 +97,8 @@ class MainWindow(QMainWindow):
 
         self.percolation_analyzer = PercolationAnalyzer()
         self.spectral_analyzer = SpectralAnalyzer()
-        self.energy_analyzer = EnergyCascadeAnalyzer()
+        self.energy_analyzer = EnergyCascadeAnalyzer(
+            initial_energy=self._worker._cfg.energy_initial)
         self.consensus_analyzer = ConsensusAnalyzer()
         self.health_analyzer = SwarmHealthAnalyzer()
         self.anomaly_detector = AnomalyDetector()
@@ -365,36 +366,47 @@ class MainWindow(QMainWindow):
         
         # Connect Analyzers to Event Logger
         self.event_logger.event_logged.connect(self.event_timeline.add_event)
-        
+
+        self._connect_analyzer_signals()
+
+
+    def _connect_analyzer_signals(self) -> None:
+        """
+        Wire the ANALYZER objects' signals.
+
+        Extracted so reset_analyzers() can re-wire after replacing the
+        analyzer objects: Qt connections belong to the OBJECT, so replacing
+        an analyzer silently orphaned every connection made at construction
+        -- after the first replay reset, collapse/instability/cascade events
+        and the swarm-map visual triggers were permanently dead while the
+        panels kept updating, making the failure invisible (audit F-37).
+        """
         self.percolation_analyzer.percolation_collapse_detected.connect(lambda t: self.event_logger.log_event("percolation_collapse_detected", "percolation", t))
         self.percolation_analyzer.percolation_recovered.connect(lambda t: self.event_logger.log_event("percolation_recovered", "percolation", t))
-        
+
         self.spectral_analyzer.spectral_instability_detected.connect(lambda t: self.event_logger.log_event("spectral_instability_detected", "spectral", t))
         self.spectral_analyzer.spectral_recovered.connect(lambda t: self.event_logger.log_event("spectral_recovered", "spectral", t))
-        
+
         self.energy_analyzer.energy_cascade_detected.connect(lambda t: self.event_logger.log_event("energy_cascade_detected", "energy", t))
         self.energy_analyzer.energy_cascade_recovered.connect(lambda t: self.event_logger.log_event("energy_cascade_recovered", "energy", t))
         self.energy_analyzer.energy_stress_warning.connect(lambda t: self.event_logger.log_event("energy_stress_warning", "energy", t))
-        
+
         self.consensus_analyzer.consensus_diverging.connect(lambda t: self.event_logger.log_event("consensus_diverging", "consensus", t))
         self.consensus_analyzer.consensus_converged.connect(lambda t: self.event_logger.log_event("consensus_converged", "consensus", t))
         self.consensus_analyzer.consensus_oscillating.connect(lambda t: self.event_logger.log_event("consensus_oscillating", "consensus", t))
         self.consensus_analyzer.consensus_stalled.connect(lambda t: self.event_logger.log_event("consensus_stalled", "consensus", t))
-        
+
         # Event bindings for Network Viewer
-        self.percolation_analyzer.percolation_collapse_detected.connect(lambda t: None) # It gets data from perc_metrics
         self.spectral_analyzer.spectral_instability_detected.connect(lambda t: self.swarm_map.trigger_spectral_instability())
         self.spectral_analyzer.spectral_recovered.connect(lambda t: self.swarm_map.clear_spectral_instability())
         self.energy_analyzer.energy_cascade_detected.connect(lambda t: self.swarm_map.trigger_energy_cascade())
         self.energy_analyzer.energy_cascade_recovered.connect(lambda t: self.swarm_map.clear_energy_cascade())
-        
-
-    # ── Frame handler (stub for Phase 2F+) ───────────────────
 
     def reset_analyzers(self) -> None:
         self.percolation_analyzer = PercolationAnalyzer()
         self.spectral_analyzer = SpectralAnalyzer()
-        self.energy_analyzer = EnergyCascadeAnalyzer()
+        self.energy_analyzer = EnergyCascadeAnalyzer(
+            initial_energy=self._worker._cfg.energy_initial)
         self.consensus_analyzer = ConsensusAnalyzer()
         self.health_analyzer = SwarmHealthAnalyzer()
         self.anomaly_detector = AnomalyDetector()
@@ -407,6 +419,9 @@ class MainWindow(QMainWindow):
         self.spectral_alarm.reset()
         self.energy_heatmap_mapper._last_hash = -1
         
+        # Re-wire: the fresh analyzer objects above have no connections (F-37).
+        self._connect_analyzer_signals()
+
         self.event_logger.events.clear()
         self.event_timeline._event_list.clear()
         self.fused_timeline.clear()
@@ -528,7 +543,7 @@ class MainWindow(QMainWindow):
             f"Components: {perc_metrics.num_components} | LCC: {perc_metrics.connectivity_ratio * 100:.0f}% | "
             f"Events: {len(self.event_logger.events)} | Last: {last_event} | "
             f"Anomalies: {anom_metrics.anomaly_count} | Suspicious: {int((anom_metrics.class_labels == 1).sum())} | "
-            f"Health: {health_metrics.health_score:.2f} ({health_metrics.state}) | "
+            f"Health: {health_metrics.raw_score:.2f} ({health_metrics.state}) | "
             f"Mode: {mode}"
         )
 
