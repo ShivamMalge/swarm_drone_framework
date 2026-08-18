@@ -80,3 +80,11 @@ bias (real figure: +1.81, scale mismatch, `/100` concealment — withdrawn in §
   same weight as positive ones; metrics that stop discriminating are dropped, not rescued.
 - Manuscript figures only via `experiments/publish_figures.py` (md5-verified); figure CSVs are
   `*_merged.csv` (collision-proof names); `plot_results.py` refuses wrong-but-parseable inputs.
+- **Verification artifacts must never share a namespace with production artifacts.** This shape
+  recurred three times before it was named: the metrics handler mutating simulation state (F-17),
+  ad-hoc verification runs clobbering the thermodynamics CSV that feeds Figure 4, and finally the
+  F-17 regression pin itself writing `experiment_3_stability.csv` into the real `logs/` — inside
+  the test that pins this very class. The rule generalises all three fixes: observers are
+  read-only, verification runs write to scratch/tmp namespaces (`tmp_path`, the session
+  scratchpad), and anything that generates a production input does so through its named producer
+  script. If a check needs to write, the first question is *where*, not *what*.

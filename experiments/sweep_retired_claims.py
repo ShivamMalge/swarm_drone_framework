@@ -18,8 +18,12 @@ WHAT THE SWEEP COVERS
 WHAT THE SWEEP CANNOT REACH (stated, so the guarantee has known limits)
   - compressed payloads: PDF FlateDecode streams, PNG IDAT -- text that exists
     only inside a compressed stream will not match. The repo's PDFs are
-    third-party papers (refrences/) plus draft PDFs slated for recompile; the
-    PNGs are generated figures whose sources are the swept CSVs.
+    third-party papers (refrences/); the PNGs are generated figures whose
+    sources are the swept CSVs. The ONE submitted artifact with a compressed
+    text layer -- manuscript/final_manuscript.pdf -- is covered separately by
+    experiments/verify_manuscript_pdf.py, which extracts the text layer with
+    pypdf and checks both the retired set and the presence of the corrected
+    numbers. Run both tools at the gate; neither substitutes for the other.
   - text rendered INTO images (figure pixels, architecture JPGs)
   - git history (intentionally: history is the audit trail, not the product)
 
@@ -72,8 +76,18 @@ ALLOWLIST = {
     # correction of the baseline"). Quoting a retired figure in the sentence
     # that retires it is the one place it belongs.
     "manuscript/final_manuscript.tex": {"Centralized Oracle", "+0.04", "4.5\\times"},
-    # This tool and its tests name the patterns it hunts.
+    # These tools name the patterns they hunt.
     "experiments/sweep_retired_claims.py": "*",
+    "experiments/verify_manuscript_pdf.py": "*",
+    # The compiled manuscript's payload is FlateDecode-compressed: raw byte
+    # matches inside it are codec coincidences (a deflate stream happened to
+    # contain the ASCII bytes "1999" surrounded by garbage), and absence of
+    # matches would be equally meaningless. Byte-scanning it yields noise in
+    # both directions, so it is excluded HERE and verified authoritatively by
+    # experiments/verify_manuscript_pdf.py, which decompresses the text layer
+    # and checks retired-absent AND corrected-present. Both tools are gate
+    # items; this entry is valid only as long as that one runs.
+    "manuscript/final_manuscript.pdf": "*",
     # The F-09 explanatory comment quotes the retired figure on purpose
     # ("1999 +/- 2 read as a measurement when it is 3 idle survivors").
     "experiments/run_monte_carlo_table.py": {"1999"},
@@ -85,9 +99,6 @@ ALLOWLIST = {
     # coincide with retired figures. The pre-audit April export was deleted
     # outright; future exports land here and are data, not claims.
     "outputs/": "*",
-    # Stale compiled draft, slated for recompile at the Phase 5 gate; its
-    # numbers are the reason the gate requires recompilation.
-    "draft 11.pdf": "*",
 }
 
 SKIP_DIRS = {".git", "__pycache__", ".venv", "venv", ".pytest_cache"}
@@ -143,7 +154,12 @@ def scan_bytes(data: bytes, origin: str, hits: list) -> None:
                     ctx = data[lo:hi].decode(enc, errors="replace")
                 except Exception:
                     ctx = repr(data[lo:hi])
-                ctx = " ".join(ctx.split())
+                # ascii-safe: hit contexts can contain arbitrary bytes, and a
+                # Windows cp1252 console otherwise dies mid-REPORT on the
+                # first exotic character -- a reporting tool must not crash
+                # while reporting.
+                ctx = " ".join(ctx.split()).encode(
+                    "ascii", "backslashreplace").decode("ascii")
                 hits.append((origin, pattern, enc, ctx))
                 break  # one encoding hit per pattern per file is enough
 
