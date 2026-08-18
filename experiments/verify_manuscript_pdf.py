@@ -55,7 +55,7 @@ def must_not_contain(label, needle, allowed_context=None):
 print("1. Corrected numbers present in the compiled output:")
 must_contain("Table III t50 127/128", "127±5", "128±5")
 must_contain("Table III decay pair", "0.261±0.017", "0.0499")
-must_contain("censoring 50/50", "(50/50censored)")
+must_contain("censoring 50/50", "(50/50c.)")  # table abbreviates; caption expands "c."
 must_contain("energy ratio 5.2x", "5.2×")
 must_contain("oracle margin 1.55x", "1.55×")
 must_contain("oracle sensitivity row", "199±5", "1454±137")
@@ -72,12 +72,17 @@ must_not_contain("15 million", "15million")
 must_not_contain("perfectly matches", "perfectlymatches")
 must_not_contain("thermodynamic braking", "thermodynamicbraking")
 
-print("\n3. Placeholders VISIBLY present (must not render as something plausible):")
-must_contain("ORCID placeholder", "0000000198765432")
+print("\n3. Placeholders and removed-author material:")
+# Author decision (2026-08-18): the 4th author was removed, and the
+# placeholder ORCID belonged to her -- BOTH must now be ABSENT.
+must_not_contain("removed ORCID", "0000000198765432")
+must_not_contain("removed author Shruthi", "Shruthi")
+# The IEEEtran funding-agency thanks remains the one visible template
+# placeholder, left for the author to fill or delete before submission.
 must_contain("funding-agency placeholder", "Identifyapplicablefundingagency")
 
-print("\n4. Author block (4 authors, pending author-list decision):")
-for name in ("ShivamMalge", "PrajwalNarendraHegde", "KoushikKR", "Shruthi"):
+print("\n4. Author block (3 authors, per author decision 2026-08-18):")
+for name in ("ShivamMalge", "PrajwalNarendraHegde", "KoushikKR"):
     must_contain(f"author: {name}", name)
 
 print("\n5. Structure:")

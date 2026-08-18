@@ -95,7 +95,7 @@ If you utilize this simulation framework for academic research, please cite our 
 ```bibtex
 @inproceedings{malge2026decentralized,
   title={Decentralized Swarm Autonomy Framework for Cyber-Physical Systems under Communication and Energy Constraints},
-  author={Malge, Shivam and Hegde, Prajwal Narendra and K R, Koushik and Shruthi},
+  author={Malge, Shivam and Hegde, Prajwal Narendra and K R, Koushik},
   booktitle={IEEE Student Conference},
   year={2026}
 }

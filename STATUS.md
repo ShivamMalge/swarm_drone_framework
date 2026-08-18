@@ -1,4 +1,4 @@
-# Status Snapshot — gate passed except two author blockers, 2026-08-18
+# Status Snapshot — submission-ready, 2026-08-18
 
 **Companion documents:** `audit_findings.md` (findings F-01..F-39), `fixes_phases.md` (plan +
 pasted evidence per item, including the executed Phase 5 gate), `rust_conversion_plan.md`
@@ -6,17 +6,17 @@ pasted evidence per item, including the executed Phase 5 gate), `rust_conversion
 
 ---
 
-## Where things stand: SUBMISSION-READY EXCEPT TWO ITEMS, BOTH THE AUTHOR'S
+## Where things stand: SUBMISSION-READY
 
-The Phase 5 gate has been executed with evidence. Every box is ticked except:
+The Phase 5 gate has been executed with evidence, and the two former author blockers are
+RESOLVED (author decision, 2026-08-18): the 4th author was removed — which also dissolved the
+placeholder ORCID, hers — and the paper of record carries 3 authors, verified rendering in the
+compiled PDF with the removed name and ORCID verified ABSENT. Tables IV/V were restructured
+(fixed tabular, scriptsize) after a rendering-overflow report and visually confirmed clean.
 
-1. **ORCID `0000-0001-9876-5432`** — placeholder pattern; author confirms with the co-author.
-   It renders VISIBLY as-is in the compiled PDF (verified), so it cannot silently pass as real.
-2. **Author list** — PDF-of-record now carries 4 authors (matching the `.tex`); the author
-   decides whether that is the final list.
-
-Nothing else blocks. Do not submit until both are resolved; the gate checklist in
-`fixes_phases.md` enforces this in writing.
+**One template placeholder remains, deliberately visible:** the IEEEtran funding-agency thanks
+("Identify applicable funding agency here. If none, delete this.") — the author fills or deletes
+it at submission. Everything else is done.
 
 ## The paper of record
 
