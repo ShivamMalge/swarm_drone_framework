@@ -24,7 +24,7 @@ it at submission. Everything else is done.
 `.tex` (12 pages, 5 figures). The stale `draft 11.pdf` is deleted. The compiled output was
 **verified, not assumed**: `experiments/verify_manuscript_pdf.py` extracts the text layer and
 asserts corrected numbers present, retired set absent outside the two withdrawal narratives,
-placeholders visible, all 4 authors rendered. CLEAN, exit 0.
+exactly 3 authors rendered with the removed name and ORCID asserted absent. CLEAN, exit 0.
 
 Current Table III (50 seeds, all corrections applied):
 
