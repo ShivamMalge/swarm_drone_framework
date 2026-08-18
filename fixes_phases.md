@@ -1269,6 +1269,29 @@ Do not submit until every box is ticked with pasted evidence.
 
 **Record note (author, 2026-08-17) — Algorithm 3's empty-neighbourhood case.** The CODE was correct throughout: `compute_local_centroid` has always returned the agent's own position for an empty neighbourhood, and every measurement of F-04 measured real behaviour. What was defective was the SPECIFICATION — the printed algorithm took a `min` over a possibly-empty set, leaving its own load-bearing branch undefined, and this survived F-04's discovery, the eviction work that made the fixed point exact, and every prior pseudocode pass. It was caught only by the gate's line-by-line diff. These are different failure modes: wrong code corrupts results; an undefined spec corrupts *reproducibility* — an independent implementer following the paper would have had to guess the branch the whole result rests on. That distinction is why the gate exists and why the diff is line-by-line rather than claim-by-claim.
 
+### Citation audit (author-requested, 2026-08-18) — previously unaudited
+
+The reference apparatus had never been checked: the paper uses MANUAL `[N]` brackets (not `\cite{}`), so nothing ever validated text against bibliography. Structural result: 24/24 bibitems cited, no dangling numbers, no orphans — before AND after the fixes below (re-verified).
+
+Fixed with evidence (cross-checked against the actual PDFs in `refrences/`):
+- **b4** title: "Market-based multi**computer robot** coordination" → "multi**robot**" (PDF title page).
+- **b6** authors: Yang et al. has SIX authors (PDF header); Srinivasa and Sukthankar were missing.
+- **b10** Schwager IJRR: vol. 28(3), pp. 357–375 added (was year-only).
+- **b11** Raja et al.: IEEE Access **vol. 9, 2021** (DOI `ACCESS.2021.3138857`, published 2021-12-27), not vol. 10, 2022.
+- **b17** Wang & Zhang, Sci. Rep.: **Art. no. 17025** (from the DOI `s41598-025-17025-x`), not "p. 1234" — a placeholder-pattern page number, same smell as the removed ORCID.
+- **"SwarmFly" does not exist.** The name appears nowhere in b9's paper (searched full text); b9 is Chen et al.'s coordination approach, not a named simulation platform. Table II row → "Chen et al. [9]"; the §II-E platforms sentence no longer presents [9] as a simulator.
+- **Table I "Centralized Coverage [14]"** — b14 is Shetty et al., *connectivity maintenance* via distributed ADMM: wrong topic entirely. Row now cites [2] (Cortés, coverage control) + [18] (Santos, minimum-energy coverage — supports the row's "Energy Constraints: Yes"). b14 rehomed to §II-C's connectivity-maintenance survey sentence, where it belongs.
+- **[2] and [3] placements**: Cortés [2] moved from "epistemic uncertainty" (unsupported) to "maintaining spatial coverage [2]"; Penrose [3] moved from "simulators rely on unrealistic assumptions" (unsupported — it is an RGG mathematics monograph) to the §III-A RGG definition, its first honest home.
+- **[16] rephrase**: the "inverse energy cascade" concept is OURS, not Saleem et al.'s — the sentence now attributes only the load-redistribution mitigation to [16] and owns the term ("what we refer to as").
+
+Verified consistent from the repo PDFs, no change needed: b12, b13, b15, b16, b18, b22 (exact vol/issue/pages match), b23, b24 (exact), b7 (2109–2121 correct).
+
+⚠️ **FLAGGED FOR AUTHOR — b8 venue.** "A Review on Swarm Resilience Enhancement" is cited as *Proc. IEEE ICRA, 2025*, but the PDF carries **no venue markings at all**, and the source filename (`icra-2025-robots-wild-15.pdf`) suggests an ICRA *workshop* paper. Citing a workshop paper as main-conference proceedings is the kind of error reviewers catch. Confirm the venue from your source and adjust; I could not verify it from inside the repo.
+
+⚠️ **Unverifiable from the repo** (no PDF present; metadata plausible but unchecked): b19 (Wu/He/Liu ACC 2016, pp. 5136–5140), b20 (An et al., L-CSS 2025), b21 (Liu et al., TAC 69(5) — the round "pp. 2000–2010" is worth a second look). Spot-check these three against their sources before submission.
+
+Recompiled and re-verified after all edits: citation cross-check clean (24/24, no orphans), `verify_manuscript_pdf.py` exit 0, sweep exit 0.
+
 **GATE EXECUTED 2026-08-17 — results inline below. Three boxes remain open: PDF recompile (held pending author review of the gate report), ORCID, author list (both author-blocked by design).**
 
 - [ ] **`grep -c "PENDING REGENERATION" manuscript/final_manuscript.tex` → `0`.** Nothing compiles for submission while that block is present. It sits above Table III precisely so a stale table cannot look authoritative; it is removed only when 1.2/1.3 have regenerated the numbers and pasted the runner output here.
