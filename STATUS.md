@@ -1,90 +1,82 @@
-# Status Snapshot — end of session, 2026-08-16
+# Status Snapshot — gate passed except two author blockers, 2026-08-18
 
-**For the next session.** Companion documents: `audit_findings.md` (findings F-01..F-39),
-`fixes_phases.md` (plan + pasted evidence per item), `rust_conversion_plan.md` (R0 results; port
-is post-submission). Repo head at time of writing: `c7aee7a` on `main`, pushed.
+**Companion documents:** `audit_findings.md` (findings F-01..F-39), `fixes_phases.md` (plan +
+pasted evidence per item, including the executed Phase 5 gate), `rust_conversion_plan.md`
+(post-submission). Repo head at time of writing: `fd22601` on `main`, pushed.
 
 ---
 
-## Where the paper stands
+## Where things stand: SUBMISSION-READY EXCEPT TWO ITEMS, BOTH THE AUTHOR'S
 
-All numbers below are the **adopted, current** Table III (50 seeds, post-auction-correction):
+The Phase 5 gate has been executed with evidence. Every box is ticked except:
 
-| Arm | t50 (ticks) | Decay (units/tick) | Survival (ticks) |
+1. **ORCID `0000-0001-9876-5432`** — placeholder pattern; author confirms with the co-author.
+   It renders VISIBLY as-is in the compiled PDF (verified), so it cannot silently pass as real.
+2. **Author list** — PDF-of-record now carries 4 authors (matching the `.tex`); the author
+   decides whether that is the final list.
+
+Nothing else blocks. Do not submit until both are resolved; the gate checklist in
+`fixes_phases.md` enforces this in writing.
+
+## The paper of record
+
+`manuscript/final_manuscript.pdf` — compiled 2026-08-18 with tectonic 0.15.0 from the corrected
+`.tex` (12 pages, 5 figures). The stale `draft 11.pdf` is deleted. The compiled output was
+**verified, not assumed**: `experiments/verify_manuscript_pdf.py` extracts the text layer and
+asserts corrected numbers present, retired set absent outside the two withdrawal narratives,
+placeholders visible, all 4 authors rendered. CLEAN, exit 0.
+
+Current Table III (50 seeds, all corrections applied):
+
+| Arm | t50 (ticks) | Decay (units/tick) | Survival |
 |---|---|---|---|
-| Unconstrained RGG | 98 ± 2 | 0.289 ± 0.022 | 373 ± 31 |
+| Unconstrained RGG | 127 ± 5 | 0.261 ± 0.017 | 407 ± 29 |
 | Oracle (all-to-all cost) | 21 ± 0 | 2.801 ± 0.207 | 39 ± 4 |
-| **Proposed** | **98 ± 2** | **0.051 ± 0.002** | **> 2000 (47/50 censored)** |
+| **Proposed** | **128 ± 5** | **0.0499 ± 0.0000** (genuine, see caption) | **> 2000 (50/50 censored)** |
 
-**Surviving headline:** 5.6× lower energy decay, cleanly separated CIs. §V-C states explicitly
-that the growth of this ratio across revisions (4.5× → 5.6×) is a *baseline correction, not an
-improvement* — the broken auction had been silently undercharging the baseline.
+Claims: 5.2× energy reduction (headline); no differential attrition delay (stated as a negative
+result); oracle buys 1.55× half-life, consumed entirely by all-to-all bandwidth cost; the
+pursuit–halt tension with its 6% tail observed → traced → fixed → re-measured to 0/50; the
+two-regime F-04 story (phantom-centroid convergence vs exact fixed point, separated by belief
+eviction); §V-E provenance section naming all three silent-protection corrections.
 
-**Findings (new, positive):**
-- Oracle cost decomposition: centralized coordination ≈ 2× swarm half-life (t50 199 vs 97),
-  entirely consumed by all-to-all bandwidth cost under this energy model (`tab:oracle_sensitivity`).
-- F-04 Voronoi stationary fixed point under isolation — the real mechanism behind the energy result.
-- **Pursuit–halt tension (§V-C):** task pursuit overrides the fixed-point halt; in 3/50 runs (6%)
-  that opposition produces total swarm loss. Reported as a finding qualifying the headline.
-- ε-bound decomposition (§V-D): real consensus-layer stability property (unbounded divergence
-  without it — 1e39 in 600 ticks, 1e154 on one seed), negligible energy contribution.
+## Verification infrastructure (all gate items, re-run at submission)
 
-**Refuted, stated in-text:** no attrition delay (t50 98 vs 98); oracle-matching; sustained
-network connectivity (λ₂ column dropped — confounded at every conditioning); the +0.04 proxy
-bias (real figure: +1.81, scale mismatch, `/100` concealment — withdrawn in §V-B).
+- `python -m pytest tests/` → **199 passed, 0 failed** (full suite incl. GUI; PySide6 installed)
+- `python diagnostics_audit.py` → 9/9, every check falsifiable; `--self-test` proves it by
+  sabotaging the projector and catching it
+- `python experiments/publish_figures.py --check` → 3× md5 MATCH
+- `python experiments/sweep_retired_claims.py` → exit 0 (encoding-agnostic byte sweep; limits
+  stated in its docstring)
+- `python experiments/verify_manuscript_pdf.py` → exit 0 (text-layer check of the compiled PDF;
+  authoritative for the one artifact whose payload is compressed)
+- `tests/test_regression_pins.py` — the audit's history as permanent tests (hidden ε clamp,
+  1e154 overflow, ψ clamp, logging purity, corpse-λ₂, belief-age bound, oracle channel)
 
-## What is done
-
-- **Phase 0** (fabrications), **0.6** (oracle billing + perf: suite 98 min → ~4 min), **Phase 1**
-  (1.1–1.5: metrics measure what they claim) — all with pasted evidence.
-- **Phase 2 largely done:** MS-13 (Algorithm 1 two-stage pseudocode, 8/8 tests green),
-  MS-14 option (b) (one bound, one owner; internal clamp removed; ceil discretisation — F-24 dead),
-  MS-15 (Algorithm 2 pseudocode = code), MS-16 (§V-C rewrite), MS-20 (KD-tree per-sender
-  `query_ball_point`, bit-identical, §III-C updated), MS-21 (dwell time → polling interval),
-  MS-22, MS-23 (per-experiment methodology table), MS-25, MS-30 (ψ clamped; blackout marked),
-  MS-02..MS-09 (Table III rebuild), MS-01/03 (abstract).
-- Auction (2.3/2.4): energy-aware min-cost bid, single-commitment, expiry, **round-robin gossip**
-  (recency starves concurrent auctions — measured; "soonest-resolving" fails symmetrically).
-- Tests: 15 failed / 95 passed, all pre-existing failures (GUI-blocked files aside).
-
-## Open items, in intended order
-
-1. **Phase 3.1 — LocalMap eviction (F-12). NEXT, fresh session.** Behaviour change that can
-   reopen Phase 1 numbers (staleness → τ_max → ε; FRAGMENTED onset; phantom-neighbour Voronoi
-   targets). Sequence like MS-14/Algorithm-2: code → verify → full suite → flag if Table III
-   moves → only then manuscript (`[MS-26]`).
-2. **MS-17 Eq. (1)** — `R̃_tx = R_tx − ω_env` still printed (2 hits); replace with the actual
-   three-factor survival model. **MS-18 Eq. (2) guard** — "fully-fragmented proxy scalar" still
-   printed (1 hit); code returns a *maximal* proxy. **MS-19 Eq. (3)** — `γ_c·R_tx²` still printed;
-   code charges `γ_c·(R_tx/R_base)²`. All three are §IV text-only edits, no re-runs needed.
-3. **MS-24** — §V-D "±0.3 oscillations" claim unsubstantiated; Fig. 5 annotations were removed,
-   §V-D prose partially rewritten; re-check the remaining sentence against regenerated Fig. 5.
-4. **MS-27** — README overclaim ("mathematically guaranteeing"). **MS-28** — Intro line 60
-   qualifier. Quick edits.
-5. **Phase 3.2/3.5** — `coverage_completion_rate` still a labelled-broken diagnostic; dead config
-   (`comm_radius_max`, `AUCTION_TIMEOUT` enum) still present.
-6. **Phase 4** — remaining test repairs (packet-drop contract, regime-detection, replay F-25/F-31,
-   scenario F-35, analytics F-27..F-30, GUI F-37; `diagnostics_audit.py` vacuous checks 4.2).
-7. **Phase 5 gate**, then recompile the PDF (draft 11.pdf is stale by many revisions) and
-   reconcile the author list / ORCID (`0000-0001-9876-5432` looks placeholder).
-8. **Rust port: post-submission** (author decision; R0 measured the suite at ~4 min and near
-   core-saturation).
-
-## Standing rules this project runs on (author-set, keep following)
+## Standing rules (author-set; a fresh session inherits these, not rediscovers them)
 
 - Evidence rule: no item is done until its verify step **ran** and the literal output is pasted
-  into `fixes_phases.md`.
+  into `fixes_phases.md`. Use TRUE exit codes — never a pipeline's tail status.
 - Behaviour changes: code → verify → full 50-seed suite → **flag before rewriting the paper if
   Table III moves** — especially when the shift is favourable.
-- A smaller true result beats a larger unsupported one; negative results are reported with the
-  same weight as positive ones; metrics that stop discriminating are dropped, not rescued.
-- Manuscript figures only via `experiments/publish_figures.py` (md5-verified); figure CSVs are
-  `*_merged.csv` (collision-proof names); `plot_results.py` refuses wrong-but-parseable inputs.
-- **Verification artifacts must never share a namespace with production artifacts.** This shape
-  recurred three times before it was named: the metrics handler mutating simulation state (F-17),
-  ad-hoc verification runs clobbering the thermodynamics CSV that feeds Figure 4, and finally the
-  F-17 regression pin itself writing `experiment_3_stability.csv` into the real `logs/` — inside
-  the test that pins this very class. The rule generalises all three fixes: observers are
-  read-only, verification runs write to scratch/tmp namespaces (`tmp_path`, the session
-  scratchpad), and anything that generates a production input does so through its named producer
-  script. If a check needs to write, the first question is *where*, not *what*.
+- A smaller true result beats a larger unsupported one; negative results carry the same weight;
+  metrics that stop discriminating are dropped, not rescued.
+- Manuscript figures only via `publish_figures.py`; the compiled PDF only via
+  `verify_manuscript_pdf.py`; figure CSVs are `*_merged.csv`; `plot_results.py` refuses
+  wrong-but-parseable inputs.
+- **Verification artifacts must never share a namespace with production artifacts.** Named after
+  three instances of one shape: the metrics handler mutating simulation state (F-17), ad-hoc
+  verification runs clobbering the thermodynamics CSV, and the F-17 regression pin writing into
+  the real `logs/` — inside the test that pins this very class. Observers are read-only;
+  verification runs write to scratch/tmp namespaces; production inputs come only from their
+  named producer scripts. If a check needs to write, the first question is *where*, not *what*.
+- Specification defects are distinct from code defects: correct code under an undefined printed
+  algorithm corrupts *reproducibility*, not results (Algorithm 3's empty-neighbourhood case).
+  The gate's algorithm diffs are line-by-line for this reason.
+
+## After submission
+
+- Rust port per `rust_conversion_plan.md` (R0 already measured; the suite runs in ~4 min and the
+  port is a constant-factor play — post-submission by decision).
+- Remaining non-blocking niceties: GUI panels beyond test coverage; scenario TaskParams UI
+  surfacing; percolation Figure 2 could move to a multi-seed sweep if a reviewer asks.
