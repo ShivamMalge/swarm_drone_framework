@@ -77,9 +77,9 @@ print("\n3. Placeholders and removed-author material:")
 # placeholder ORCID belonged to her -- BOTH must now be ABSENT.
 must_not_contain("removed ORCID", "0000000198765432")
 must_not_contain("removed author Shruthi", "Shruthi")
-# The IEEEtran funding-agency thanks remains the one visible template
-# placeholder, left for the author to fill or delete before submission.
-must_contain("funding-agency placeholder", "Identifyapplicablefundingagency")
+# The IEEEtran funding-agency thanks was DELETED (author decision,
+# 2026-08-18, no funding to declare) -- the last template placeholder.
+must_not_contain("funding-agency placeholder", "Identifyapplicablefundingagency")
 
 print("\n4. Author block (3 authors, per author decision 2026-08-18):")
 for name in ("ShivamMalge", "PrajwalNarendraHegde", "KoushikKR"):

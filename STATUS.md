@@ -14,9 +14,9 @@ placeholder ORCID, hers — and the paper of record carries 3 authors, verified 
 compiled PDF with the removed name and ORCID verified ABSENT. Tables IV/V were restructured
 (fixed tabular, scriptsize) after a rendering-overflow report and visually confirmed clean.
 
-**One template placeholder remains, deliberately visible:** the IEEEtran funding-agency thanks
-("Identify applicable funding agency here. If none, delete this.") — the author fills or deletes
-it at submission. Everything else is done.
+The last template placeholder — the IEEEtran funding-agency thanks — was deleted (author
+decision, 2026-08-18, no funding to declare); the verifier now asserts its absence. Nothing
+remains open.
 
 ## The paper of record
 
