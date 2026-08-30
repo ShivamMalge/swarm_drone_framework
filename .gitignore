@@ -18,5 +18,4 @@ outputs/_test_replay/
 # Private presentation prep, never push
 Conference_QA_Prep.docx
 
-.tex*
-final_manuscript.pdf
+
