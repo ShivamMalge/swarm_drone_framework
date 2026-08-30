@@ -19,3 +19,14 @@ outputs/_test_replay/
 Conference_QA_Prep.docx
 
 
+# Private: unpublished paper source and compiled PDF (public history note:
+# earlier versions remain in git history on the remote until a history rewrite)
+manuscript/
+
+# Private: peer-review material and internal analyses/drafts
+Review/
+Documents/
+Architecture/
+
+# Third-party published PDFs (copyright: must not be redistributed publicly)
+refrences/

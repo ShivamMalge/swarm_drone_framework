@@ -38,7 +38,6 @@ swarm_drone_framework/
 │   ├── run_energy_cascade.py     # Simulates high node attrition
 │   └── run_percolation.py        # Environmental jamming tests
 │
-├── manuscript/                 # LaTeX Source for the IEEE Paper
 └── README.md                   # This file
 ```
 
