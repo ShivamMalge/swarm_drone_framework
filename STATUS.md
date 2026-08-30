@@ -53,6 +53,15 @@ eviction); §V-E provenance section naming all three silent-protection correctio
 - `tests/test_regression_pins.py` — the audit's history as permanent tests (hidden ε clamp,
   1e154 overflow, ψ clamp, logging purity, corpse-λ₂, belief-age bound, oracle channel)
 
+## History rewrite note (2026-08-18)
+
+The git history was rewritten (`git filter-repo`) to remove private material: `manuscript/`,
+`Review/`, `Documents/`, `Architecture/`, `refrences/`, and the old compiled drafts. Consequence:
+**commit hashes cited anywhere in the audit documents predate the rewrite** and no longer resolve
+on the remote; they resolve only in the pre-scrub backup bundle
+(`../swarm_backup_pre_scrub.bundle`, kept locally, never pushed). The audit *content* is
+unchanged — every finding, measurement, and evidence block stands as written.
+
 ## Standing rules (author-set; a fresh session inherits these, not rediscovers them)
 
 - Evidence rule: no item is done until its verify step **ran** and the literal output is pasted
