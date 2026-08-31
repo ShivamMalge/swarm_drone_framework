@@ -88,6 +88,12 @@ ALLOWLIST = {
     # and checks retired-absent AND corrected-present. Both tools are gate
     # items; this entry is valid only as long as that one runs.
     "manuscript/final_manuscript.pdf": "*",
+    # Same artifact under its title-named filename (identical compressed payload;
+    # the text-layer verifier is authoritative for it too).
+    "manuscript/Decentralized Swarm Autonomy Framework for Cyber-Physical Systems under Communication and Energy Constraints.pdf": "*",
+    # Private, gitignored presentation prep: quotes retired numbers only inside
+    # withdrawal explanations ("an earlier revision reported ...").
+    "Conference_QA_Prep.docx": "*",
     # The F-09 explanatory comment quotes the retired figure on purpose
     # ("1999 +/- 2 read as a measurement when it is 3 idle survivors").
     "experiments/run_monte_carlo_table.py": {"1999"},
